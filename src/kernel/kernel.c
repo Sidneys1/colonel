@@ -1,4 +1,7 @@
 #include "kernel.h"
+#include "sbi/sbi.h"
+#include "devices/device_tree.h"
+
 #include "common.h"
 
 typedef unsigned char uint8_t;
@@ -10,26 +13,7 @@ struct virtio_blk_req *blk_req;
 paddr_t blk_req_paddr;
 unsigned blk_capacity;
 
-extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[], _binary_shell_bin_start[], _binary_shell_bin_size[];
-
-struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
-                       long arg5, long fid, long eid) {
-    register long a0 __asm__("a0") = arg0;
-    register long a1 __asm__("a1") = arg1;
-    register long a2 __asm__("a2") = arg2;
-    register long a3 __asm__("a3") = arg3;
-    register long a4 __asm__("a4") = arg4;
-    register long a5 __asm__("a5") = arg5;
-    register long a6 __asm__("a6") = fid;
-    register long a7 __asm__("a7") = eid;
-
-    __asm__ __volatile__("ecall"
-                         : "=r"(a0), "=r"(a1)
-                         : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5),
-                           "r"(a6), "r"(a7)
-                         : "memory");
-    return (struct sbiret){.error = a0, .value = a1};
-}
+extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[], _binary___build_shell_bin_start[], _binary___build_shell_bin_size[];
 
 uint32_t virtio_reg_read32(unsigned offset) {
     return *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset));
@@ -48,7 +32,7 @@ void virtio_reg_fetch_and_or32(unsigned offset, uint32_t value) {
 }
 
 long getchar(void) {
-    struct sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+    sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
     return ret.error;
 }
 
@@ -172,7 +156,7 @@ void virtio_blk_init(void) {
     blk_req = (struct virtio_blk_req *) blk_req_paddr;
 }
 
-struct process procs[PROCS_MAX]; // All process control structures.
+struct process procs[PROCS_MAX] = {}; // All process control structures.
 
 __attribute__((naked)) void user_entry(void) {
     __asm__ __volatile__(
@@ -240,7 +224,7 @@ struct process *create_process(const void *image, size_t image_size) {
     }
 
     // Initialize fields.
-    proc->pid = i + 1;
+    proc->pid = i - 1;
     proc->state = PROC_RUNNABLE;
     proc->sp = (uint32_t) sp;
     proc->page_table = page_table;
@@ -253,9 +237,9 @@ struct process *idle_proc;    // Idle process
 void yield(void) {
     // Search for a runnable process
     struct process *next = idle_proc;
-    for (int i = 0; i < PROCS_MAX; i++) {
+    for (int i = 1; i <= PROCS_MAX; i++) {
         struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
-        if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+        if (proc->state == PROC_RUNNABLE && proc->pid >= 0) {
             next = proc;
             break;
         }
@@ -523,247 +507,23 @@ void fs_flush(void) {
     kprintf("wrote %d bytes to disk\n", sizeof(disk));
 }
 
-void probe_sbi_extension(long eid, const char * name) {
-    struct sbiret value = sbi_call(eid, 0, 0, 0, 0, 0, 3, 0x10);
-    kprintf("probe_extension[0x%x]: value=%s0x%x %s\033[0m\terror=%d\t(%s Extension)\n", eid, value.value ? "\033[32m" : "\033[31m", value.value, value.value ? "(available)    " : "(not available)", value.error, name);
+void kernel_shutdown() {
+    printf("[Idle Process] Calling system shutdown.\n");
+    sbiret value = sbi_call(SBI_SRST_TYPE_SHUTDOWN, SBI_SRST_REASON_NONE, 0, 0, 0, 0, 0, SBI_EXT_SRST);
+    PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
 
-long hart_get_status(long hartid) {
-    struct sbiret value = sbi_call(hartid, 0, 0, 0, 0, 0, 0x2, 0x48534d);
-    if (value.error == -3)
-        return -3;
-    kprintf("hart_get_status[%d] (Hart State Management Extension): value=0x%x %s\terror=%d %s\n",
-        hartid, 
-        value.value,
-        value.value == 0
-            ? "(started)        "
-            : value.value == 1 ? "(stopped)        "
-            : value.value == 2 ? "(start pending)  "
-            : value.value == 3 ? "(stop pending)   "
-            : value.value == 4 ? "(suspended)      "
-            : value.value == 5 ? "(suspend pending)"
-            : value.value == 6 ? "(resume pending) "
-            :                    "(unknown)        ",
-        value.error,
-        value.error ==  0 ? "(no error)" : "(unknown)");
-    return value.value;
-}
+long boot_hart, num_harts;
+bool kernel_verbose = false, is_booting = true;
 
-static long boot_hart = -1, num_harts = -1;
-
-typedef struct fdt_header {
-    uint32_t magic;
-    uint32_t totalsize;
-    uint32_t off_dt_struct;
-    uint32_t off_dt_strings;
-    uint32_t off_mem_rsvmap;
-    uint32_t version;
-    uint32_t last_comp_version;
-    uint32_t boot_cpuid_phys;
-    uint32_t size_dt_strings;
-    uint32_t size_dt_struct;
-} fdt_header;
-
-typedef struct fdt_reserve_entry {
-    uint64_t address;
-    uint64_t size;
-} fdt_reserve_entry;
-
-enum FDT_TOKEN { FDT_BEGIN_NODE = 1, FDT_END_NODE, FDT_PROP, FDT_NOP, FDT_END };
-
-typedef struct fdt_prop {
-    uint32_t len;
-    uint32_t nameoff;
-} fdt_prop;
-
-void print_property_stringlist(const char* string_list, uint32_t len) {
-    printf("<stringlist> [");
-    size_t inc = 0;
-    do {
-        printf("`\033[32m%s\033[0m`", string_list + inc);
-        inc += strlen(string_list + inc) + 1;
-        if (inc >= len)
-            break;
-        printf(", ");
-    } while (true);
-    putchar(']');
-}
-
-enum FDT_TOKEN *print_node(enum FDT_TOKEN *token, const char* strings, size_t depth) {
-    for (size_t i = 0; i < depth; i++)
-        printf("│");
-    printf("╭─");
-    bool cont = true;
-
-    const char* name = (char*)((uint32_t)token + 4);
-    uint32_t len = strlen(name);
-    printf(" 0x%p /%s\n", token, name);
-    token += 1 + (len + sizeof(token)) / sizeof(token);
-
-    do {
-        switch (be_to_le(*token)) {
-        case FDT_BEGIN_NODE:
-            for (size_t i = 0; i < depth + 1; i++)
-                printf("│");
-            putchar('\n');
-            token = print_node(token, strings, depth + 1);
-            break;
-
-        case FDT_END_NODE:
-            for (size_t i = 0; i < depth; i++)
-                printf("│");
-            printf("╰─ /%s\n", name);
-            return token + 1;
-
-        case FDT_PROP: {
-            const fdt_prop *prop = (fdt_prop*)((uint32_t)token + 4);
-            const char* name = strings+be_to_le(prop->nameoff);
-            for (size_t i = 0; i < depth; i++)
-                putchar('|');
-            printf("├─╴ {len=%d} %s: ", be_to_le(prop->len), name);
-            if (be_to_le(prop->len) == 0) {
-                // Do nothing
-                printf("<empty>");
-            } else if (strcmp(name, "reg") == 0) {
-                printf("\033[90mI don't understand this one at the moment...\033[0m", 0);
-            } else if (strcmp(name, "#address-cells") == 0 || strcmp(name, "#size-cells") == 0 || strcmp(name, "phandle") == 0 || strcmp(name, "virtual-reg") == 0 || strcmp(name, "timebase-frequency") == 0) {
-                /* U32 */
-                printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", be_to_le(*(uint32_t*)(prop + 1)));
-            } else if (strcmp(name, "compatible") == 0) {
-                /* STRINGLIST */
-                print_property_stringlist((char*)(prop + 1), be_to_le(prop->len));
-            } else if (strcmp(name, "model") == 0 || strcmp(name, "bootargs") == 0 || strcmp(name, "stdout-path") == 0 || strcmp(name, "device_type") == 0 || strcmp(name, "status") == 0) {
-                /* STRING */
-                const char* string = (char*)(prop + 1);
-                printf("<string> `\033[32m%s\033[0m`", string);
-            } else if (strcmp(name, "bank-width") == 0) {
-                printf("\033[33m<Unknown custom property type!>\033[0m");
-            } else {
-                PANIC("\033[33m<Unhandled property type!>\033[0m");
-                cont = false;
-            }
-            putchar('\n');
-            uint32_t next_addr = ((uint32_t)(prop + 1)) + be_to_le(prop->len);
-            if (next_addr % 4)
-                next_addr += 4 - (next_addr % 4);
-            token = (enum FDT_TOKEN*)(next_addr);
-        } break;
-
-        case FDT_NOP:
-            token++;
-            break;
-
-        case FDT_END:
-            kprintf("Token at 0x%p is FDT_END\n", token);
-            for (size_t i = 0; i < depth; i++)
-                printf("│");
-            printf("╰─ /%s\n", name);
-            return token + 1;
-
-        default:
-            // kprintf();
-            PANIC("Token at 0x%p is unknown (0x%x)!\n", token, be_to_le(*token));
-            break;
-        }
-    } while (cont);
-
-    for (size_t i = 0; i < depth; i++)
-        printf("│");
-    printf("╰─ /%s (\033[31mwith errors\033[0m)\n", name);
-    return token;
-}
-
-void inspect_device_tree(const fdt_header *fdt) {
-    printf("\n");
-    kprintf("Found FDT magic at 0x%x (%x), version %d\n", fdt, be_to_le(fdt->magic), be_to_le(fdt->version));
-    kprintf("Boot CPU is /cpus/cpu@%d in the device tree...\n", be_to_le(fdt->boot_cpuid_phys));
-    kprintf("FDT total size is %d bytes\n", be_to_le(fdt->totalsize));
-    kprintf("Strings size is %d bytes\n", be_to_le(fdt->size_dt_strings));
-    kprintf("Devicetree size is %d bytes\n", be_to_le(fdt->size_dt_struct));
-
-    const fdt_reserve_entry *entries = (void*)((uint32_t)fdt + be_to_le(fdt->off_mem_rsvmap));
-    kprintf("Reserved entries table starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_mem_rsvmap), entries);
-    long i = 0;
-    kprintf("Entry at %d: %x (%d)\n", i, entries[i].address, entries[i].size);
-    while ((entries[i].address + entries[i].size) != 0) ++i;
-    kprintf("There are %d reserved memory ranges in the device tree.\n", i);
-
-    const char* strings = (char*)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
-    kprintf("Strings block starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_strings), strings);
-
-    enum FDT_TOKEN *token = (enum FDT_TOKEN*)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
-    kprintf("Device tree starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_struct), token);
-
-    bool cont = false;
-    do {
-        token = print_node(token, strings, 0);
-        // switch (be_to_le(*token)) {
-        //     case FDT_BEGIN_NODE: {
-        //         const char* name = (char*)((uint32_t)token + 4);
-        //         uint32_t len = strlen(name);
-        //         kprintf("Token at 0x%p is FDT_BEGIN_NODE: \"%s\" (len: %d)\n", token, name, len);
-        //         // kprintf("Incrementing token by %d\n", 1 + (len+sizeof(token)) / sizeof(token));
-        //         token += 1 + (len + sizeof(token)) / sizeof(token);
-        //     } break;
-        //     case FDT_END_NODE:
-        //         kprintf("Token at 0x%p is FDT_END_NODE\n", token);
-        //         token += 1;
-        //         break;
-        //     case FDT_PROP: {
-        //         const fdt_prop *prop = (fdt_prop*)((uint32_t)token + 4);
-        //         const char* name = strings+be_to_le(prop->nameoff);
-        //         kprintf("Token at 0x%p is FDT_PROP {len=%d, nameoff=%d, name=`%s`}\n", token, be_to_le(prop->len), be_to_le(prop->nameoff), name);
-        //         if (be_to_le(prop->len) == 0) {
-        //             // Do nothing
-        //         } else if (strcmp(name, "reg") == 0) {
-        //             kprintf("\tI don't understand this one at the moment...\n", 0);
-        //         } else if (strcmp(name, "#address-cells") == 0 || strcmp(name, "#size-cells") == 0) {
-        //             uint32_t address_cells = be_to_le(*(uint32_t*)(prop + 1));
-        //             kprintf("\tValue: %d\n", address_cells);
-        //         } else if (strcmp(name, "compatible") == 0) {
-        //             const char* string_list = (char*)(prop + 1);
-        //             size_t inc = 0;
-        //             do {
-        //                 kprintf("\tCompatible: %s\n", string_list + inc);
-        //                 inc += strlen(string_list + inc) + 1;
-        //             } while (inc < be_to_le(prop->len));
-        //         } else if (strcmp(name, "model") == 0) {
-        //             const char* string = (char*)(prop + 1);
-        //             kprintf("\tModel: %s\n", string);
-        //         } else {
-        //             cont = false;
-        //             break;
-        //         }
-        //         uint32_t next_addr = ((uint32_t)(prop + 1)) + be_to_le(prop->len);
-        //         if (next_addr % 4)
-        //             next_addr += 4 - (next_addr % 4);
-        //         token = (enum FDT_TOKEN*)(next_addr);
-        //     } break;
-        //     case FDT_NOP:
-        //         kprintf("Token at 0x%p is FDT_NOP\n", token);
-        //         cont = false;
-        //         break;
-
-        //     case FDT_END:
-        //         kprintf("Token at 0x%p is FDT_END\n", token);
-        //         cont = false;
-        //         break;
-        //     default:
-        //         kprintf("Token at 0x%p is unknown (0x%x)!\n", token, be_to_le(*token));
-        //         cont = false;
-        //         break;
-        // }
-    } while (cont);
-
-    printf("\n");
-}
-
-void kernel_main(long arg0, long arg1) {
-    register long a0 __asm__("a0") = arg0;
-    register long a1 __asm__("a1") = arg1;
-
+void kernel_main(__attribute__((unused)) long arg0, long arg1) {
     memset(__bss, 0, (size_t) __bss_end - (size_t)__bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
+
+    if (!is_booting) {
+        kprintf("Non-booting core!", 0);
+        while(true) {}
+    }
 
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
@@ -775,61 +535,56 @@ void kernel_main(long arg0, long arg1) {
     uint32_t time = READ_CSR(time);
     kprintf("CPU uptime: %d ticks. (%d.%ds?)\n", time, time / 10000000, (time % 10000000) / 10000);
 
-    struct sbiret value = sbi_call(0, 0, 0, 0, 0, 0, 0, 0x10);
-    kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
-
-    probe_sbi_extension(0x10,       "Base");
-    probe_sbi_extension(0x4442434e, "\"DBCN\" Debug Console");
-    probe_sbi_extension(0x48534d,   "\"HSM\" Hart State Management");
-    probe_sbi_extension(0x53525354, "\"SRST\" System Reset");
-    probe_sbi_extension(0x54494d45, "\"TIME\" Timer");
-
-    for (long hartid = 0; hartid < MAX_HARTS; hartid++) {
-        long status = hart_get_status(hartid);
-        if (status == -3) {
-            num_harts = hartid;
-            break;
-        }
-        if (status == 0)
-            boot_hart = hartid;
-
-        if (hartid + 1 == MAX_HARTS)
-            kprintf("There may be more than %d harts...\n", MAX_HARTS);
-    }
-    kprintf("There are %d harts, and the kernel is booting on hart #%d.\n", num_harts, boot_hart);
-
-
     if (*(unsigned long *)arg1 != 0xedfe0dd0)
         PANIC("Could not find magic device tree value!");
-    // kprintf("Device tree location: a1=%x magic=%x\n", arg1, *(unsigned long *)arg1);
+
+    kprintf("arg0: 0x%x (%d)\n", arg0, arg0);
+
     inspect_device_tree((const fdt_header *)arg1);
 
-    sbi_call(0x0, 0x0, 0, 0, 0, 0, 0, 0x53525354);
-    PANIC("TODO");
+    if (kernel_verbose) {
+        sbiret value = sbi_call(0, 0, 0, 0, 0, 0, 0, 0x10);
+        kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
+
+        probe_sbi_extension(SBI_EXT_BASE, "Base");
+        probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
+        probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
+        probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
+        probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
+
+        for (long hartid = 0; hartid < MAX_HARTS; hartid++) {
+            enum SBI_HSM_STATE status = hart_get_status(hartid);
+            if (status == SBI_HSM_STATE_ERROR) {
+                num_harts = hartid;
+                break;
+            }
+            if (status == SBI_HSM_STATE_STARTED)
+                boot_hart = hartid;
+
+            if (hartid + 1 == MAX_HARTS)
+                kprintf("There may be more than %d harts...\n", MAX_HARTS);
+        }
+        kprintf("There are %d harts, and the kernel is booting on hart #%d.\n", num_harts, boot_hart);
+    }
 
     virtio_blk_init();
 
     fs_init();
 
     idle_proc = create_process(NULL, 0);
-    idle_proc->pid = -1; // idle
+    // idle_proc->pid = -1; // idle
     current_proc = idle_proc;
 
-    create_process(_binary_shell_bin_start, (size_t)_binary_shell_bin_size);
+    is_booting = false;
 
-    kprintf("Starting process %d...\n\n", 0);
+    process *proc = create_process(_binary___build_shell_bin_start, (size_t)_binary___build_shell_bin_size);
+
+    kprintf("Starting process %d...\n\n", proc->pid);
     uint32_t start_time = READ_CSR(time);
     yield();
     
     // Shutdown?
-    printf("[Idle Process] Calling system shutdown.\n");
-    uint32_t ctime = READ_CSR(time);
-    kprintf("Current time: (0x%x %x) %d\n", READ_CSR(timeh), ctime, ctime);
-    uint32_t diff = ctime - start_time;
-    kprintf("Process 0 ran for (0x%x) %d ticks. (%d.%ds?)\n", diff, diff, diff / 10000000, (diff % 10000000) / 10000);
-    value = sbi_call(0x0, 0x0, 0, 0, 0, 0, 0, 0x53525354);
-    kprintf("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
-    PANIC("failed to call system shutdown...");
+    kernel_shutdown();
 }
 
 struct file *fs_lookup(const char *filename) {

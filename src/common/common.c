@@ -47,8 +47,6 @@ size_t sstrlen(const char *s, size_t max) {
     return -1;
 }
 
-void putchar(char ch);
-
 void printf(const char *fmt, ...) {
     va_list vargs;
     va_start(vargs, fmt);

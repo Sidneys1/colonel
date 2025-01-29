@@ -30,6 +30,8 @@ size_t strlen(const char *s);
 size_t sstrlen(const char *s, size_t max);
 void printf(const char *fmt, ...);
 
+void putchar(char ch);
+
 uint32_t be_to_le(uint32_t value);
 
 #define SYS_PUTCHAR 1

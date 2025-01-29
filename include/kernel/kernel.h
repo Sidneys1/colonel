@@ -1,8 +1,6 @@
 #pragma once
 #include "common.h"
 
-#define kprintf(fmt, ...) printf("\033[90m[kernel] " fmt "\033[0m", __VA_ARGS__)
-
 #define MAX_HARTS 128
 
 struct trap_frame {
@@ -46,6 +44,11 @@ struct trap_frame {
         __tmp;                                                                 \
     })
 
+#define kprintf(fmt, ...) { \
+    uint32_t time = READ_CSR(time); \
+    printf("\033[90m[kernel %d.%d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000, __VA_ARGS__); \
+}
+
 #define WRITE_CSR(reg, value)                                                  \
     do {                                                                       \
         uint32_t __tmp = (value);                                              \
@@ -58,22 +61,17 @@ struct trap_frame {
         while (1) {}                                                           \
     } while (0)
 
-struct sbiret {
-    long error;
-    long value;
-};
-
 #define PROCS_MAX 8       // Maximum number of processes
 #define PROC_UNUSED   0   // Unused process control structure
 #define PROC_RUNNABLE 1   // Runnable process
 
-struct process {
+typedef struct process {
     int pid;             // Process ID
     int state;           // Process state
     vaddr_t sp;          // Stack pointer
     uint32_t *page_table;
     uint8_t stack[8192]; // Kernel stack
-};
+} process;
 
 #define SATP_SV32 (1u << 31)
 #define PAGE_V    (1 << 0)   // "Valid" bit (entry is enabled)
