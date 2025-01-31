@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 void main(void) {
+    // yield();
     while (1) {
 prompt:
         printf("> ");

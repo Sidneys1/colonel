@@ -9,6 +9,7 @@
 
 typedef struct process {
     int pid;             // Process ID
+    long core;
     int state;           // Process state
     vaddr_t sp;          // Stack pointer
     uint32_t *page_table;

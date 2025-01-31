@@ -3,6 +3,7 @@
 #include <process.h>
 #include <devices/virtio.h>
 #include <stdio.h>
+#include <harts.h>
 
 extern char __kernel_base[], __free_ram_end[];
 
@@ -116,4 +117,44 @@ struct process *create_process(const void *image, size_t image_size) {
     proc->sp = (uint32_t) sp;
     proc->page_table = page_table;
     return proc;
+}
+
+void yield() {
+    // Search for a runnable process
+    hart_local *hl = get_hart_local();
+    process *current_proc = get_current_proc();
+    process *next = hl->idle_proc;
+    for (int i = 1; i <= PROCS_MAX; i++) {
+        process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+        // kprintf("Considering process %d (%d).\n", proc->pid, proc->state);
+        if (proc->state == PROC_RUNNABLE && proc->pid >= 0) {
+            next = proc;
+            break;
+        }
+    }
+
+    // If there's no runnable process other than the current one, return and continue processing
+    if (next == current_proc) {
+        // kprintf("No runnable processes!\n", 0);
+        return;
+    }
+
+    // Context switch
+    // kprintf("Switching from process %d to %d.\n", current_proc->pid, next->pid);
+    struct process *prev = current_proc;
+    set_current_proc(next);
+
+    // Switch page table.
+    __asm__ __volatile__(
+        "sfence.vma\n"
+        "csrw satp, %[satp]\n"
+        "sfence.vma\n"
+        "csrw sscratch, %[sscratch]\n"
+        :
+        // Don't forget the trailing comma!
+        : [satp] "r" (SATP_SV32 | ((uint32_t) next->page_table / PAGE_SIZE)),
+          [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
+    );
+
+    switch_context(&prev->sp, &next->sp);
 }

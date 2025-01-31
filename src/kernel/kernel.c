@@ -1,56 +1,20 @@
 #include <kernel.h>
 #include <stdio.h>
+
 #include <sbi/sbi.h>
 #include <memory_mgmt.h>
 #include <process.h>
 #include <devices/device_tree.h>
 #include <devices/virtio.h>
+#include <harts.h>
 
 #include <common.h>
-
-struct hart_local {
-    uint32_t hartid;
-};
-struct process *current_proc; // Currently running process
-struct process *idle_proc;    // Idle process
 
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[], _binary___build_shell_bin_start[], _binary___build_shell_bin_size[];
 extern struct file files[FILES_MAX];
 extern struct process procs[PROCS_MAX];
 
-void yield() {
-    // Search for a runnable process
-    struct process *next = idle_proc;
-    for (int i = 1; i <= PROCS_MAX; i++) {
-        struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
-        if (proc->state == PROC_RUNNABLE && proc->pid >= 0) {
-            next = proc;
-            break;
-        }
-    }
-
-    // If there's no runnable process other than the current one, return and continue processing
-    if (next == current_proc)
-        return;
-
-    // Context switch
-    struct process *prev = current_proc;
-    current_proc = next;
-
-    // Switch page table.
-    __asm__ __volatile__(
-        "sfence.vma\n"
-        "csrw satp, %[satp]\n"
-        "sfence.vma\n"
-        "csrw sscratch, %[sscratch]\n"
-        :
-        // Don't forget the trailing comma!
-        : [satp] "r" (SATP_SV32 | ((uint32_t) next->page_table / PAGE_SIZE)),
-          [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
-    );
-
-    switch_context(&prev->sp, &next->sp);
-}
+// Currently running process
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -278,26 +242,16 @@ void kernel_shutdown(uint32_t hartid) {
     PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
 
-struct hart_local heart_locals[MAX_HARTS] = {};
-
-struct hart_local* get_hart_local(void) {
-    register void* a0 __asm__("a0");
-    __asm__ __volatile__(
-        "mv a0, gp"
-        : "=r"(a0)
-    );
-    return a0;
-}
-
 void secondary_main(uint32_t hartid) {
     WRITE_CSR(stvec, (uint32_t) secondary_entry);
     heart_locals[hartid].hartid = hartid;
-    // hart_local secondary_hart_local = {hartid};
     __asm__ __volatile__(
-        "mv gp, %[hartid]"
+        "mv gp, %[hartid]\n"
+        "mv tp, %[procid]"
         : // Output
-        : [hartid] "r" (heart_locals + hartid) // Input
-        : "gp" // Clobbers
+        : [hartid] "r" (heart_locals + hartid), // Input
+          [procid] "r" (&heart_locals[hartid].current_proc)
+        : "gp", "tp" // Clobbers
     );
 
     kprintf("[SECONDARY] Hello from hart #%d!\n", get_hart_local()->hartid);
@@ -323,10 +277,12 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // hart_local boot_hart_local = {hartid};
     heart_locals[hartid].hartid = hartid;
     __asm__ __volatile__(
-        "mv gp, %[hartid]"
+        "mv gp, %[hartid]\n"
+        "mv tp, %[procid]"
         : // Output
-        : [hartid] "r" (heart_locals + hartid) // Input
-        : "gp" // Clobbers
+        : [hartid] "r" (heart_locals + hartid), // Input
+          [procid] "r" (&heart_locals[hartid].current_proc)
+        : "gp", "tp" // Clobbers
     );
     kprintf("[BOOT] Hello from hart #%d!\n", get_hart_local()->hartid);
 
@@ -374,7 +330,9 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
 
     fs_init();
 
-    current_proc = idle_proc = create_process(NULL, 0);
+    hart_local *hl = get_hart_local();
+    hl->idle_proc = create_process(NULL, 0);
+    set_current_proc(hl->idle_proc);
 
     process *proc = create_process(_binary___build_shell_bin_start, (size_t)_binary___build_shell_bin_size);
 
@@ -386,8 +344,11 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
 }
 
 void handle_syscall(struct trap_frame *f) {
-    kprintf("Handling syscall on core #%d\n", get_hart_local()->hartid);
+    // kprintf("Handling syscall on core #%d\n", get_hart_local()->hartid);
     switch (f->a3) {
+        case SYS_YIELD:
+            yield();
+            break;
         case SYS_PUTCHAR:
             putchar(f->a0);
             break;
@@ -403,6 +364,7 @@ void handle_syscall(struct trap_frame *f) {
             }
             break;
         case SYS_EXIT:
+            process *current_proc = get_current_proc();
             kprintf("process %d exited\n", current_proc->pid);
             current_proc->state = PROC_EXITED;
             yield();

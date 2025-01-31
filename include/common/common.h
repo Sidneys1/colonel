@@ -22,8 +22,11 @@ size_t sstrlen(const char *s, size_t max);
 
 uint32_t be_to_le(uint32_t value);
 
+void yield(void);
+
 #define SYS_PUTCHAR 1
 #define SYS_GETCHAR 2
 #define SYS_EXIT    3
 #define SYS_READFILE  4
 #define SYS_WRITEFILE 5
+#define SYS_YIELD 6

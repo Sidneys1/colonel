@@ -1,7 +1,5 @@
 #pragma once
-#include "stddef.h"
-
-#define MAX_HARTS 32
+#include <stddef.h>
 
 #define WAIT_FOR_INTERRUPT() __asm__ ( \
     "wfi" \

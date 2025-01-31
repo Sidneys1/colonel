@@ -47,3 +47,7 @@ int readfile(const char *filename, char *buf, int len) {
 int writefile(const char *filename, const char *buf, int len) {
     return syscall(SYS_WRITEFILE, (int) filename, (int) buf, len);
 }
+
+void yield(void) {
+    syscall(SYS_YIELD, 0, 0, 0);
+}
