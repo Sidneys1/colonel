@@ -1,5 +1,7 @@
-#include "kernel.h"
-#include "sbi/sbi.h"
+#include <kernel.h>
+#include <sbi/sbi.h>
+#include <common.h>
+#include <stdio.h>
 
 sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                        long arg5, long fid, long eid) {
@@ -29,19 +31,19 @@ enum SBI_HSM_STATE hart_get_status(long hartid) {
     sbiret value = sbi_call(hartid, 0, 0, 0, 0, 0, SBI_HSM_FN_HART_GET_STATUS, SBI_EXT_HSM);
     if (value.error == -3)
         return SBI_HSM_STATE_ERROR;
-    kprintf("hart_get_status[%d] (Hart State Management Extension): value=0x%x %s\terror=%d %s\n",
-        hartid, 
-        value.value,
-        value.value == SBI_HSM_STATE_STARTED
-            ? "(started)        "
-            : value.value == SBI_HSM_STATE_STOPPED ? "(stopped)        "
-            : value.value == SBI_HSM_STATE_START_PENDING ? "(start pending)  "
-            : value.value == SBI_HSM_STATE_STOP_PENDING ? "(stop pending)   "
-            : value.value == SBI_HSM_STATE_SUSPENDED ? "(suspended)      "
-            : value.value == SBI_HSM_STATE_SUSPEND_PENDING ? "(suspend pending)"
-            : value.value == SBI_HSM_STATE_RESUME_PENDING ? "(resume pending) "
-            :                    "(unknown)        ",
-        value.error,
-        value.error ==  0 ? "(no error)" : "(unknown)");
+    // kprintf("hart_get_status[%d] (Hart State Management Extension): value=0x%x %s\terror=%d %s\n",
+    //     hartid, 
+    //     value.value,
+    //     value.value == SBI_HSM_STATE_STARTED
+    //         ? "(started)        "
+    //         : value.value == SBI_HSM_STATE_STOPPED ? "(stopped)        "
+    //         : value.value == SBI_HSM_STATE_START_PENDING ? "(start pending)  "
+    //         : value.value == SBI_HSM_STATE_STOP_PENDING ? "(stop pending)   "
+    //         : value.value == SBI_HSM_STATE_SUSPENDED ? "(suspended)      "
+    //         : value.value == SBI_HSM_STATE_SUSPEND_PENDING ? "(suspend pending)"
+    //         : value.value == SBI_HSM_STATE_RESUME_PENDING ? "(resume pending) "
+    //         :                    "(unknown)        ",
+    //     value.error,
+    //     value.error ==  0 ? "(no error)" : "(unknown)");
     return (enum SBI_HSM_STATE)value.value;
 }

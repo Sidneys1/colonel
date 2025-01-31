@@ -1,4 +1,6 @@
-#include "user.h"
+#include <user.h>
+#include <common.h>
+#include <stdio.h>
 
 void main(void) {
     while (1) {
@@ -40,12 +42,12 @@ prompt:
             exit();
         else if (strcmp(cmdline, "readfile") == 0) {
             char buf[128];
-            int len = readfile("./hello.txt", buf, sizeof(buf));
+            int len = readfile("hello.txt", buf, sizeof(buf));
             buf[len] = '\0';
             printf("%s\n", buf);
         }
         else if (strcmp(cmdline, "writefile") == 0)
-            writefile("./hello.txt", "Hello from shell!\n", 19);
+            writefile("hello.txt", "Hello from shell!\n", 19);
         else
             printf("unknown command: %s\n", cmdline);
     }

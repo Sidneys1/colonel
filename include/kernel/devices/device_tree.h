@@ -1,6 +1,7 @@
 #pragma once
 
-#include "common.h"
+
+#include <stddef.h>
 
 typedef struct fdt_header {
     uint32_t magic;

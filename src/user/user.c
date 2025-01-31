@@ -31,6 +31,7 @@ void start(void) {
         :: [stack_top] "r" (__stack_top)
     );
 }
+
 void putchar(char ch) {
     syscall(SYS_PUTCHAR, ch, 0, 0);
 }

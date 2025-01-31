@@ -1,12 +1,14 @@
 BUILD_DIR:=./build
+CORES:=2
 
 QEMU:=qemu-system-riscv32
 OBJCOPY:=llvm-objcopy
+GDB:=gdb-multiarch
 
-CC:=clang
-CFLAGS:=-std=c11 -O2 -g3 -Wall -Wextra --target=riscv32 -ffreestanding -nostdlib -I ./include/common/
-KCFLAGS:=-I ./include/kernel/
-UCFLAGS:=-I ./include/user/
+CC:=bear --append --output compile_commands.json -- clang
+CFLAGS:=-std=c23 -O0 -ggdb -Wall -Wextra --target=riscv32 -ffreestanding -nostdlib -I ./include/common/
+KCFLAGS:=-isystem ./include/kernel/
+UCFLAGS:=-isystem ./include/user/
 
 rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)$(filter $(subst *,%,$2),$d))
 
@@ -22,27 +24,43 @@ DEPS:=$(call rwildcard,build,*.d)
 
 DISKFILES:=$(wildcard disk/*)
 
-.PHONY: all run run-quiet clean shell kernel disk
+.PHONY: all run run-quiet debug tidy clean shell kernel disk
 .INTERMEDIATE: ${BUILD_DIR}/shell.bin
 
 all: shell kernel disk
 
 run: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp 4 -bios default -nographic -serial mon:stdio --no-reboot \
+	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
 		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
 		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
 		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
 		-kernel ${BUILD_DIR}/kernel.elf -append "verbose"
 
 run-quiet: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp 4 -bios default -nographic -serial mon:stdio --no-reboot \
+	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
 		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
 		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
 		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
 		-kernel ${BUILD_DIR}/kernel.elf
 
+debug: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
+	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
+		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
+		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
+		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+		-kernel ${BUILD_DIR}/kernel.elf -s -S \
+	& ${GDB} -tui -q -ex "file ${BUILD_DIR}/kernel.elf" \
+		-ex "target remote 127.0.0.1:1234" \
+		-ex "b boot" \
+		-ex "b kernel_main" \
+		-ex "b secondary_boot" \
+		-ex "c"
+
+tidy:
+	clang-tidy -system-headers -header-filter=".*" -p ${BUILD_DIR} ${KSRC} ${CSRC} ${USRC}
+
 clean:
-	@rm -vrf ${BUILD_DIR}/ qemu.log
+	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json
 
 shell: ${BUILD_DIR}/shell.bin.o
 
@@ -64,14 +82,15 @@ ${BUILD_DIR}/user/%.o : src/user/%.c
 	@mkdir -p $(@D)
 	${CC} ${CFLAGS} ${UCFLAGS} -MD -c $< -o $@
 
-${BUILD_DIR}/shell.elf ${BUILD_DIR}/shell.map &: ${BUILD_DIR}/user/shell.o ${BUILD_DIR}/user/user.o ${BUILD_DIR}/common/common.o user.ld
+${BUILD_DIR}/shell.elf ${BUILD_DIR}/shell.map &: ${UOBJ} ${COBJ} user.ld
+	@echo Deps: $^
 	${CC} ${CFLAGS} ${UCFLAGS} -Wl,-Map=${BUILD_DIR}/shell.map -o $@ $^
 
 ${BUILD_DIR}/shell.bin.o ${BUILD_DIR}/shell.bin &: ${BUILD_DIR}/shell.elf
 	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ ${BUILD_DIR}/shell.bin
 	${OBJCOPY} -Ibinary -Oelf32-littleriscv ${BUILD_DIR}/shell.bin $@
 
-${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${BUILD_DIR}/kernel/kernel.o ${BUILD_DIR}/common/common.o ${BUILD_DIR}/kernel/sbi/sbi.o ${BUILD_DIR}/kernel/devices/device_tree.o ${BUILD_DIR}/shell.bin.o kernel.ld
+${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KOBJ} ${COBJ} ${BUILD_DIR}/shell.bin.o kernel.ld
 	${CC} ${CFLAGS} ${KCFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
 
 ${BUILD_DIR}/disk.tar: ${DISKFILES}

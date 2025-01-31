@@ -13,6 +13,9 @@ enum : uint32_t {
 
 #define SBI_EXT_DBCN 0x4442434e
 #define SBI_EXT_TIME 0x54494d45
+enum : uint32_t {
+    SBI_TIME_FN_SET_TIMER,
+};
 
 #define SBI_EXT_HSM  0x48534d
 enum : uint32_t {
@@ -32,6 +35,10 @@ enum SBI_HSM_STATE : uint32_t {
 
     SBI_HSM_STATE_ERROR = -1
 };
+enum : uint32_t {
+    SBI_HSM_SUSPEND_TYPE_DEFAULT_RETENTIVE,
+    SBI_HSM_SUSPEND_TYPE_DEFAULT_NONRETENTIVE = 0x80000000
+};
 
 #define SBI_EXT_SRST 0x53525354
 enum : uint32_t {
@@ -42,6 +49,11 @@ enum : uint32_t {
 enum : uint32_t {
     SBI_SRST_REASON_NONE,
     SBI_SRST_REASON_SYSTEM_FAILURE
+};
+
+#define SBI_EXT_IPI 0x735049
+enum : uint32_t {
+    SBI_IPI_FN_SEND_IPI
 };
 
 typedef struct sbiret {
