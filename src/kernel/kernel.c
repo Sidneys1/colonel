@@ -8,13 +8,11 @@
 
 #include <common.h>
 
-// typedef struct hart_local {
-//     uint32_t hartid;
-// } hart_local;
+struct hart_local {
+    uint32_t hartid;
+};
 struct process *current_proc; // Currently running process
 struct process *idle_proc;    // Idle process
-
-// hart_local* heart_local_storage[MAX_HARTS];
 
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[], _binary___build_shell_bin_start[], _binary___build_shell_bin_size[];
 extern struct file files[FILES_MAX];
@@ -280,12 +278,29 @@ void kernel_shutdown(uint32_t hartid) {
     PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
 
+struct hart_local heart_locals[MAX_HARTS] = {};
+
+struct hart_local* get_hart_local(void) {
+    register void* a0 __asm__("a0");
+    __asm__ __volatile__(
+        "mv a0, gp"
+        : "=r"(a0)
+    );
+    return a0;
+}
+
 void secondary_main(uint32_t hartid) {
     WRITE_CSR(stvec, (uint32_t) secondary_entry);
-
+    heart_locals[hartid].hartid = hartid;
     // hart_local secondary_hart_local = {hartid};
-    // heart_local_storage[hartid] = &secondary_hart_local;
-    // kprintf("[SECONDARY] Hello from hart #%d!\n", heart_local_storage[hartid]->hartid);
+    __asm__ __volatile__(
+        "mv gp, %[hartid]"
+        : // Output
+        : [hartid] "r" (heart_locals + hartid) // Input
+        : "gp" // Clobbers
+    );
+
+    kprintf("[SECONDARY] Hello from hart #%d!\n", get_hart_local()->hartid);
 
     sbiret value;
     while (!is_shutting_down) {
@@ -301,31 +316,20 @@ void secondary_main(uint32_t hartid) {
     kprintf("[SECONDARY] sbi_hart_stop() value=%d\terror=%d\n", value.value, value.error);
 }
 
-// uint32_t get_hart_id(void) {
-//     register uint32_t a0 __asm__("a0");
-//     __asm__ __volatile__(
-//         "csrr a0, sscratch"
-//         : "=r"(a0)
-//     );
-//     kprintf("getting hartid: %d\n", a0);
-//     return a0;
-// }
-
 void secondary_boot();
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     memset(__bss, 0, (size_t) __bss_end - (size_t)__bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
-
-    // __asm__ __volatile__(
-    //     "csrw sscratch, %[sscratch]"
-    //     : // Output
-    //     : [sscratch] "r" (hartid) // Input
-    //     : // Clobbers
-    // );
-    // get_hart_id();
-
     // hart_local boot_hart_local = {hartid};
-    // heart_local_storage[hartid] = &boot_hart_local;
+    heart_locals[hartid].hartid = hartid;
+    __asm__ __volatile__(
+        "mv gp, %[hartid]"
+        : // Output
+        : [hartid] "r" (heart_locals + hartid) // Input
+        : "gp" // Clobbers
+    );
+    kprintf("[BOOT] Hello from hart #%d!\n", get_hart_local()->hartid);
+
 
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
@@ -333,11 +337,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     printf("\\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\-.  \\  \\ \\  __\\   \\ \\ \\____ \n");
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
-
-    // uint32_t time = READ_CSR(time);
-    // kprintf("CPU uptime: %d ticks. (%d.%ds?)\n", time, time / 10000000, (time % 10000000) / 10000);
-
-    // kprintf("Hartid: %d (%d)\n", hartid, heart_local_storage[hartid]->hartid);
 
     inspect_device_tree(fdt);
 
@@ -368,11 +367,7 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
             continue;
         kprintf("Going to try starting Hart %d.\n", start_hart);
         paddr_t page = alloc_pages(1);
-        /* sbiret value = */ sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
-        // kprintf("sbi_hart_start(%d, 0x%p, 0x%p): value=0x%x\terror=%d\n", start_hart, &secondary_boot, page, value.value, value.error);
-
-        sbi_call(READ_CSR(time) + (CLOCK_FREQ / 4), 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
-        WAIT_FOR_INTERRUPT();
+        sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
     }
 
     virtio_blk_init();
@@ -384,18 +379,14 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     process *proc = create_process(_binary___build_shell_bin_start, (size_t)_binary___build_shell_bin_size);
 
     kprintf("Starting process %d...\n\n", proc->pid);
-    // uint32_t start_time = READ_CSR(time);
     yield();
 
-    // hart_get_status(start_hart);
-    
     // Shutdown?
     kernel_shutdown(hartid);
 }
 
 void handle_syscall(struct trap_frame *f) {
-    // uint32_t hart_id = get_hart_id();
-    // hart_local* hl = heart_local_storage[hart_id];
+    kprintf("Handling syscall on core #%d\n", get_hart_local()->hartid);
     switch (f->a3) {
         case SYS_PUTCHAR:
             putchar(f->a0);
