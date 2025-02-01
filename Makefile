@@ -9,7 +9,7 @@ LOG:=qemu.log
 # QEMU executable
 QEMU:=qemu-system-riscv32
 # QEMU options
-QFLAGS:=-machine virt -bios default --no-reboot --nographic \
+QFLAGS:=-machine virt -bios default --no-reboot \
         -d unimp,guest_errors,int,cpu_reset -D ${LOG} \
         -m ${MEM} -smp ${CORES} -serial mon:stdio \
         -drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
