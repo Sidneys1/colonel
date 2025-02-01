@@ -87,14 +87,16 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
                 printf("<cells> address=\033[36m0x");
                 uint32_t ai = 0;
                 for (; ai < address_cells; ai++) {
-                    uint32_t value = be_to_le(*(uint32_t*)(prop + 1 + ai));
+                    uint32_t value = be_to_le(*((uint32_t*)(prop + 1) + ai));
+                    if (ai == 0 && value == 0) continue;
                     printf("%x", value);
                 }
                 printf("\033[0m");
                 if (size_cells) {
                     printf(", size=\033[36m0x");
                     for (uint32_t si = 0; si < size_cells; si++) {
-                        uint32_t value = be_to_le(*(uint32_t*)(prop + 1 + ai + si));
+                        uint32_t value = be_to_le(*((uint32_t*)(prop + 1) + ai + si));
+                        if (si == 0 && value == 0) continue;
                         printf("%x", value);
                     }
                 }
@@ -108,6 +110,42 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
                 uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
                 size_cells = value;
                 printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", value, value);
+            } else if (IS("ranges")) {
+                uint32_t off = sizeof(fdt_prop);
+                printf("<ranges> [");
+                uint32_t reps = (be_to_le(prop->len) / (address_cells + address_cells + size_cells)) - 1;
+                for (uint32_t i = 0; i <= reps; i++) {
+                    printf("child-bus-address=\033[36m0x");
+                    uint32_t ai = 0;
+                    for (; ai < address_cells; ai++) {
+                        uint32_t value = be_to_le(*((uint32_t*)prop + off + ai));
+                        if (ai == 0 && value == 0) continue;
+                        printf("%x", value);
+                    }
+                    printf("\033[0m");
+                    printf(",parent-bus-address=\033[36m0x");
+                    uint32_t ai2 = 0;
+                    for (; ai2 < address_cells; ai2++) {
+                        uint32_t value = be_to_le(*((uint32_t*)prop + off + ai + ai2));
+                        if (ai2 == 0 && value == 0) continue;
+                        printf("%x", value);
+                    }
+                    printf("\033[0m");
+                    uint32_t si = 0;
+                    if (size_cells) {
+                        printf(",length=\033[36m0x");
+                        for (; si < size_cells; si++) {
+                            uint32_t value = be_to_le(*((uint32_t*)prop + off + ai + ai2 + si));
+                            if (si == 0 && value == 0) continue;
+                            printf("%x", value);
+                        }
+                    }
+                    printf("\033[0m");
+                    off += ai + ai2 + si;
+                    if (i != reps)
+                        printf(", ");
+                }
+                putchar(']');
             } else if (IS("virtual-reg") || IS("timebase-frequency") || IS("#interrupt-cells") || IS("clock-frequency") || IS("value") || IS("offset") || IS("riscv,ndev") || IS("regmap") || IS("linux,pci-domain") || IS("bank-width")) {
                 /* U32 */
                 printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", be_to_le(*(uint32_t*)(prop + 1)), be_to_le(*(uint32_t*)(prop + 1)));
@@ -121,7 +159,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
                 /* STRING */
                 const char* string = (char*)(prop + 1);
                 printf("<string> `\033[32m%s\033[0m`", string);
-            } else if (IS("interrupts")|| IS("interrupt-map-mask") || IS("interrupt-map") || IS("ranges") || IS("bus-range")|| IS("interrupts-extended")) {
+            } else if (IS("interrupts")|| IS("interrupt-map-mask") || IS("interrupt-map") || IS("bus-range")|| IS("interrupts-extended")) {
                 printf("\033[33m<Unknown custom property type!>\033[0m");
             } else {
                 PANIC("\033[33m<Unhandled property type!>\033[0m");

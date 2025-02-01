@@ -115,3 +115,5 @@ void fs_flush(void);
 void virtio_blk_init(void);
 void read_write_disk(void *buf, unsigned sector, int is_write);
 struct file *fs_lookup(const char *);
+
+void probe_virtio_device(paddr_t location);

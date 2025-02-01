@@ -7,4 +7,7 @@ int getchar(void) {
     return ret.error;
 }
 
-void putchar(char ch) { sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */); }
+void putchar(char ch) {
+    // sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
+    *(volatile char*)0x10000000 = ch;
+}

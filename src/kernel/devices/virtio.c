@@ -1,3 +1,4 @@
+#include "stddef.h"
 #include <kernel.h>
 #include <devices/virtio.h>
 #include <stdio.h>
@@ -24,6 +25,42 @@ void virtio_reg_write32(unsigned offset, uint32_t value) {
 
 void virtio_reg_fetch_and_or32(unsigned offset, uint32_t value) {
     virtio_reg_write32(offset, virtio_reg_read32(offset) | value);
+}
+
+void probe_virtio_device(paddr_t location) {
+    uint32_t magic = *((volatile uint32_t*)(location + VIRTIO_REG_MAGIC));
+    kprintf("Probing virtio device at 0x%p: magic=0x%x (%s)\n", location, magic, magic == 0x74726976 ? "matches" : "does not match");
+    uint32_t reg_version = *((volatile uint32_t*)(location + VIRTIO_REG_VERSION));
+    kprintf("\tversion=0x%x (%s)\n", reg_version, reg_version == 0x1 ? "legacy" : "v2");
+    uint32_t device_id = *((volatile uint32_t*)(location + VIRTIO_REG_DEVICE_ID));
+    char *did_name = "reserved";
+    switch (device_id) {
+    case 0: break;
+    case 1: did_name = "network card"; break;
+    case 2: did_name = "block device"; break;
+    case 3: did_name = "console"; break;
+    case 4: did_name = "entropy source"; break;
+    case 5: did_name = "memory ballooning (traditional)"; break;
+    case 6: did_name = "ioMemory"; break;
+    case 7: did_name = "rpmsg"; break;
+    case 8: did_name = "SCSI host"; break;
+    case 9: did_name = "9P transport"; break;
+    case 10: did_name = "mac80211 wlan"; break;
+    case 11: did_name = "rproc serial"; break;
+    case 12: did_name = "virtio CAIF"; break;
+    case 13: did_name = "memory balloon"; break;
+    case 16: did_name = "GPU device"; break;
+    case 17: did_name = "Timer/Clock device"; break;
+    case 18: did_name = "Input device"; break;
+    case 19: did_name = "Socket device"; break;
+    case 20: did_name = "Crypto device"; break;
+    case 21: did_name = "Signal Distribution Module"; break;
+    case 22: did_name = "pstore device"; break;
+    case 23: did_name = "IOMMU device"; break;
+    case 24: did_name = "Memory device "; break;
+    default: did_name = "invalid"; break;
+    }
+    kprintf("\tdevice_id=0x%x (%s)\n", device_id, did_name);
 }
 
 struct virtio_virtq *virtq_init(unsigned index) {

@@ -1,10 +1,22 @@
 # Build output directory
 BUILD_DIR:=./build
-
 # Number of cores for QEMU
 CORES:=2
+# QEMU memory
+MEM:=128M
+# QEMU output
+LOG:=qemu.log
 # QEMU executable
 QEMU:=qemu-system-riscv32
+# QEMU options
+QFLAGS:=-machine virt -bios default --no-reboot --nographic \
+        -d unimp,guest_errors,int,cpu_reset -D ${LOG} \
+        -m ${MEM} -smp ${CORES} -serial mon:stdio \
+        -drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
+        -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+        -device VGA \
+        -kernel ${BUILD_DIR}/kernel.elf
+
 # objcopy executable
 OBJCOPY:=llvm-objcopy
 # GDB executable
@@ -57,25 +69,13 @@ DISKFILES:=$(wildcard disk/*)
 all: shell kernel disk
 
 run: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
-		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
-		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
-		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
-		-kernel ${BUILD_DIR}/kernel.elf -append "verbose"
+	${QEMU} ${QFLAGS} -append "verbose"
 
 run-quiet: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
-		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
-		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
-		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
-		-kernel ${BUILD_DIR}/kernel.elf
+	${QEMU} ${QFLAGS}
 
 debug: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
-		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
-		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
-		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
-		-kernel ${BUILD_DIR}/kernel.elf -s -S \
+	${QEMU} ${QFLAGS} -s -S \
 	& ${GDB} -tui -q -ex "file ${BUILD_DIR}/kernel.elf" \
 		-ex "target remote 127.0.0.1:1234" \
 		-ex "b boot" \

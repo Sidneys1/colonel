@@ -22,6 +22,7 @@ size_t strlen(const char *s);
 size_t sstrlen(const char *s, size_t max);
 
 uint32_t be_to_le(uint32_t value);
+uint32_t le_to_be(uint32_t value);
 
 void yield(void);
 
