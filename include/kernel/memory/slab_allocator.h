@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory/page_allocator.h>
+#include <memory/slab_allocator.h>
 
 #define SLAB(SIZE)                                                                                                     \
     struct cache_entry_##SIZE {                                                                                        \
@@ -46,6 +47,12 @@ SLAB(32)
 #define slab_alloc(X)   _SLAB_GENERIC_1(slab_alloc, X)
 #define slab_dbg(X)     _SLAB_GENERIC_1(slab_dbg, X)
 #define slab_free(X, Y) _SLAB_GENERIC_2(slab_free, X, Y)
+
+extern struct slab_4 root_slab4;
+extern struct slab_8 root_slab8;
+extern struct slab_16 root_slab16;
+extern struct slab_32 root_slab32;
+void init_root_slabs(void);
 
 #ifdef TESTS
 

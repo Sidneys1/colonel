@@ -1,7 +1,9 @@
+#include "stddef.h"
 #include <kernel.h>
 
 #include <devices/device_tree.h>
 #include <devices/virtio.h>
+#include <devices/pci.h>
 #include <harts.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
@@ -301,53 +303,67 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
 #ifdef TESTS
     slab_test_suite();
 #else
-    inspect_device_tree(fdt);
+    // inspect_device_tree(fdt);
 
-    if (kernel_verbose) {
-        sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
-        kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
+    // char *str = "Hello, World!\n";
+    // for (int i = 0; str[i] != '\0'; ++i) {
+    //     *(volatile char*)0x10000000 = str[i];
+    // }
 
-        probe_sbi_extension(SBI_EXT_BASE, "Base");
-        probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
-        probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
-        probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
-        probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
-    }
+    // probe_virtio_device(0x10001000);
+    // probe_virtio_device(0x10002000);
+    // probe_virtio_device(0x10003000);
+    // probe_virtio_device(0x10004000);
+    // probe_virtio_device(0x10005000);
+    // probe_virtio_device(0x10006000);
+    // probe_virtio_device(0x10007000);
+    // probe_virtio_device(0x10008000);
 
-    for (long hid = 0; hid < MAX_HARTS; hid++) {
-        enum SBI_HSM_STATE status = hart_get_status(hid);
-        if (status == SBI_HSM_STATE_ERROR) {
-            num_harts = hid;
-            break;
-        }
-        if (kernel_verbose && hid + 1 == MAX_HARTS)
-            kprintf("There may be more than %d harts...\n", MAX_HARTS);
-    }
-    kprintf("There are %d harts.\n", num_harts);
+    probe_pci(0x30000000);
 
-    for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
-        if (start_hart == hartid)
-            continue;
-        kprintf("Going to try starting Hart %d.\n", start_hart);
-        paddr_t page = alloc_pages(1);
-        sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
-    }
+    // inspect_device_tree(fdt);
 
-    virtio_blk_init();
+    // if (kernel_verbose) {
+    //     sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
+    //     kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
 
-    fs_init();
+    //     probe_sbi_extension(SBI_EXT_BASE, "Base");
+    //     probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
+    //     probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
+    //     probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
+    //     probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
+    // }
 
-    hart_local *hl = get_hart_local();
-    hl->idle_proc = create_process(NULL, 0);
-    set_current_proc(hl->idle_proc);
+    // for (long hid = 0; hid < MAX_HARTS; hid++) {
+    //     enum SBI_HSM_STATE status = hart_get_status(hid);
+    //     if (status == SBI_HSM_STATE_ERROR) {
+    //         num_harts = hid;
+    //         break;
+    //     }
+    //     if (kernel_verbose && hid + 1 == MAX_HARTS)
+    //         kprintf("There may be more than %d harts...\n", MAX_HARTS);
+    // }
+    // kprintf("There are %d harts.\n", num_harts);
 
-    struct file *file = fs_lookup("shell.bin");
-    if (!file)
-        PANIC("Could not find `shell.bin`!\n");
-    process *proc = create_process(file->data, file->size);
+    // for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
+    //     if (start_hart == hartid)
+    //         continue;
+    //     kprintf("Going to try starting Hart %d.\n", start_hart);
+    //     paddr_t page = alloc_pages(1);
+    //     sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
+    // }
 
-    kprintf("Starting process %d...\n\n", proc->pid);
-    yield();
+    // virtio_blk_init();
+
+    // hart_local *hl = get_hart_local();
+    // hl->idle_proc = create_process(NULL, 0);
+    // set_current_proc(hl->idle_proc);
+
+    // struct file *file = fs_lookup("shell.bin");
+    // process *proc = create_process(file->data, file->size);
+
+    // kprintf("Starting process %d...\n\n", proc->pid);
+    // yield();
 #endif
 
     // Shutdown?
