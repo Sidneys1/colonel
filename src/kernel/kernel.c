@@ -3,6 +3,8 @@
 
 #include <sbi/sbi.h>
 #include <memory_mgmt.h>
+#include <memory/page_allocator.h>
+#include <memory/slab_allocator.h>
 #include <process.h>
 #include <devices/device_tree.h>
 #include <devices/virtio.h>
@@ -230,14 +232,14 @@ void kernel_shutdown(uint32_t hartid) {
 
             uint32_t future = READ_CSR(time) + (CLOCK_FREQ / 10);
             sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
-            // kprintf("[SHUTDOWN] Sleeping for 0.1s...\n", 0);
+            // kprintf("[SHUTDOWN] Sleeping for 0.1s...\n");
 
             WAIT_FOR_INTERRUPT();
         }
     }
-    kprintf("[SHUTDOWN] All other cores are shut down.\n", 0);
+    kprintf("[SHUTDOWN] All other cores are shut down.\n");
 
-    kprintf("[SHUTDOWN] Calling system shutdown.\n", 0);
+    kprintf("[SHUTDOWN] Calling system shutdown.\n");
     sbiret value = sbi_call(SBI_SRST_TYPE_SHUTDOWN, SBI_SRST_REASON_NONE, 0, 0, 0, 0, 0, SBI_EXT_SRST);
     PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
@@ -270,11 +272,16 @@ void secondary_main(uint32_t hartid) {
     kprintf("[SECONDARY] sbi_hart_stop() value=%d\terror=%d\n", value.value, value.error);
 }
 
+struct test {
+    uint32_t foo, bar;
+    bool baz;
+    char * bat;
+};
+
 void secondary_boot();
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     memset(__bss, 0, (size_t) __bss_end - (size_t)__bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
-    // hart_local boot_hart_local = {hartid};
     heart_locals[hartid].hartid = hartid;
     __asm__ __volatile__(
         "mv gp, %[hartid]\n"
@@ -284,7 +291,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
           [procid] "r" (&heart_locals[hartid].current_proc)
         : "gp", "tp" // Clobbers
     );
-    kprintf("[BOOT] Hello from hart #%d!\n", get_hart_local()->hartid);
 
 
     printf("\n\n");
@@ -294,6 +300,9 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
+#ifdef TESTS
+    slab_test_suite();
+#else
     inspect_device_tree(fdt);
 
     if (kernel_verbose) {
@@ -338,6 +347,7 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
 
     kprintf("Starting process %d...\n\n", proc->pid);
     yield();
+#endif
 
     // Shutdown?
     kernel_shutdown(hartid);

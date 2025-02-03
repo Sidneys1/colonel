@@ -1,6 +1,7 @@
 #include <kernel.h>
 #include <devices/virtio.h>
 #include <stdio.h>
+#include <memory/page_allocator.h>
 
 struct virtio_virtq *blk_request_vq;
 struct virtio_blk_req *blk_req;

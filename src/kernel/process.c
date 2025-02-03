@@ -1,4 +1,5 @@
 #include <kernel.h>
+#include <memory/page_allocator.h>
 #include <memory_mgmt.h>
 #include <process.h>
 #include <devices/virtio.h>
@@ -135,7 +136,7 @@ void yield() {
 
     // If there's no runnable process other than the current one, return and continue processing
     if (next == current_proc) {
-        // kprintf("No runnable processes!\n", 0);
+        // kprintf("No runnable processes!\n");
         return;
     }
 

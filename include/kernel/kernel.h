@@ -1,5 +1,6 @@
 #pragma once
 #include <stddef.h>
+#include <stdio.h>
 
 #define WAIT_FOR_INTERRUPT() __asm__ ( \
     "wfi" \
@@ -49,10 +50,16 @@ struct trap_frame {
         __tmp;                                                                 \
     })
 
-#define kprintf(fmt, ...) { \
+#define kprintf(fmt, ...) do { \
     uint32_t time = READ_CSR(time); \
-    printf("\033[90m[kernel %d.%d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000, __VA_ARGS__); \
-}
+    printf("\033[90m[kernel %d.%d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000 __VA_OPT__(,) __VA_ARGS__); \
+} while (0)
+
+#ifdef DEBUG
+#define KDBG(...) kprintf(__VA_ARGS__)
+#else
+#define KDBG(...)
+#endif
 
 #define WRITE_CSR(reg, value)                                                  \
     do {                                                                       \
@@ -78,5 +85,3 @@ struct trap_frame {
 #define SSTATUS_SUM  (1 << 18)
 #define SCAUSE_ECALL 8
 #define PROC_EXITED   2
-
-paddr_t alloc_pages(uint32_t n);

@@ -193,7 +193,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
                 kprintf("Found boot args! `%s`\n", (char*)(prop + 1));
                 if (strcmp((char*)(prop + 1), "verbose") == 0) {
                     kernel_verbose = true;
-                    kprintf("Kernel is now in VERBOSE mode.\n", 0);
+                    kprintf("Kernel is now in VERBOSE mode.\n");
                 }
             } else if (IS("#address-cells")) {
                 uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
