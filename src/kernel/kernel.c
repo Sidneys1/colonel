@@ -293,12 +293,18 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
                          : "gp", "tp" // Clobbers
     );
 
+    WRITE_CSR(sstatus, READ_CSR(sstatus) | 0x02);
+    WRITE_CSR(sie, READ_CSR(sie)|0x200);
+
+
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
     printf("/\\  ___\\   /\\  __ \\   /\\ \\       /\\  __ \\   /\\ \"-.\\ \\   /\\  ___\\   /\\ \\      \n");
     printf("\\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\-.  \\  \\ \\  __\\   \\ \\ \\____ \n");
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
+
+    init_root_slabs();
 
 #ifdef TESTS
     slab_test_suite();
@@ -319,7 +325,63 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // probe_virtio_device(0x10007000);
     // probe_virtio_device(0x10008000);
 
-    probe_pci(0x30000000);
+    // probe_pci(0x30000000);
+
+    // printf("SEI=0x%x\n", READ_CSR(SEI));
+
+#define PLIC_BASE 0x0c000000
+#define UART_IRQ 10
+    // Enable UART IRQs
+    *(uint32_t*)(PLIC_BASE + UART_IRQ*4) = 1;
+#define PLIC_SENABLE(hart) (PLIC_BASE + 0x2080 + (hart)*0x100)
+    // Enable this hart's S-mode enable bit for UART interrupts
+    *(uint32_t*)(PLIC_SENABLE(hartid)) = (1 << UART_IRQ);
+
+    // set this hart's priority threshold
+#define PLIC_SPRIORITY(hart) (PLIC_BASE + 0x201000 + (hart)*0x2000)
+    *(uint32_t*)PLIC_SPRIORITY(hartid) = 0;
+
+//     // READ_CSR(mstatus);
+
+#define UART_BASE 0x10000000
+#define Reg(reg) ((volatile uint8_t*)(UART_BASE + (reg)))
+#define ReadReg(reg) (*(Reg(reg)))
+#define WriteReg(reg, value) (*(Reg(reg)) = (value))
+#define IER 1
+    WriteReg(IER, 0x00);
+#define LCR 3
+#define LCR_BAUD_LATCH (1<<7)
+    WriteReg(LCR, LCR_BAUD_LATCH);
+
+    WriteReg(0, 0x03);
+    WriteReg(1, 0x00);
+#define LCR_EIGHT_BITS (3<<0)
+    WriteReg(LCR, LCR_EIGHT_BITS);
+#define FCR 2
+#define FCR_FIFO_ENABLE (1<<0)
+#define FCR_FIFO_CLEAR (3<<1)
+    WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+
+#define IER_TX_ENABLE (1<<1)
+#define IEX_RX_ENABLE (1<<0)
+    WriteReg(IER, IER_TX_ENABLE | IEX_RX_ENABLE);
+
+//     // *(volatile uint8_t *)0x10000005 = 0x01;
+
+//     WAIT_FOR_INTERRUPT();
+
+// #define LSR 5
+// #define RHR 0
+//     if(ReadReg(LSR) & 0x01){
+//         // input data is ready.
+//         int c = ReadReg(RHR);
+//         printf("C=0x%x (%d)\n", c, c-'a');
+//     } else {
+//         printf("Nothin'\n");
+//     }
+
+    // uint8_t lsr = *(volatile uint8_t *)0x10000005;
+    // printf("LSR: 0x%x\n", lsr);
 
     // inspect_device_tree(fdt);
 
@@ -365,6 +427,8 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // kprintf("Starting process %d...\n\n", proc->pid);
     // yield();
 #endif
+
+    slab_dbg(&root_slab16);
 
     // Shutdown?
     kernel_shutdown(hartid);
@@ -434,11 +498,36 @@ void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
     uint32_t user_pc = READ_CSR(sepc);
+
+    bool interrupt = scause & 0x80000000;
+    if (interrupt) {
+        const char* cause = "unknown";
+        switch (scause & ~0x80000000) {
+        case 0: cause = "software interrupt"; break;
+        case 1: cause = "supervisor software interrupt"; break;
+        case 4: cause = "user timer interrupt"; break;
+        case 5: cause = "supervisor timer interrupt"; break;
+        default: break;
+        }
+        PANIC("Unexpected interrupt! scause=%lx (%S)\n", scause & ~0x80000000, cause);
+    }
+
     if (scause == SCAUSE_ECALL) {
         handle_syscall(f);
         user_pc += 4;
     } else {
-        PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+        const char* cause = "unknown";
+        switch (scause) {
+        case 0: cause = "instruction address misaligned"; break;
+        case 1: cause = "instruction access fault"; break;
+        case 2: cause = "illegal instruction"; break;
+        case 3: cause = "breakpoint"; break;
+        case 5: cause = "load access fault"; break;
+        case 6: cause = "AMO address misaligned"; break;
+        case 7: cause = "store/AMO access fault"; break;
+        default: break;
+        }
+        PANIC("unexpected trap scause=%x (%s), stval=%x, sepc=%x\n", scause, cause, stval, user_pc);
     }
 
     WRITE_CSR(sepc, user_pc);

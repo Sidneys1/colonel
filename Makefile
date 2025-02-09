@@ -14,6 +14,8 @@ GDB:=gdb-multiarch
 CC:=bear --append --output compile_commands.json -- clang
 # "extra" CFLAGS. By default, we build in DEBUG mode.
 CFLAGSEXTRA?=-DDEBUG -O0 -ggdb
+# Linker flags
+LDFLAGS?=-flto -Wl,--undefined=main -Wl,--undefined=exit -Wl,--undefined=kernel_main
 # Cflags. Appends CFLAGSEXTRA.
 CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32gc -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
@@ -93,7 +95,7 @@ format:
 	clang-format -i $$(find src/ include/ -name '*.h' -o -name '*.c')
 
 clean:
-	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json
+	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json disk/shell.bin
 
 shell: disk/shell.bin
 
@@ -124,8 +126,11 @@ ${BUILD_DIR}/user/%.o : src/user/%.c $(call guard,CFLAGSEXTRA)
 	@mkdir -p $(@D)
 	${CC} ${CFLAGS} ${UCFLAGS} -MD -c $< -o $@
 
-${BUILD_DIR}/shell.elf ${BUILD_DIR}/shell.map &: ${USER_OBJ} ${COMMON_OBJ} ${STDLIB_OBJ} user.ld
-	${CC} ${CFLAGS} ${UCFLAGS} -Wl,-Map=${BUILD_DIR}/shell.map -o $@ $^
+${BUILD_DIR}/stdlib.a : ${STDLIB_OBJ}
+	ar rcs $@ $^
+
+${BUILD_DIR}/shell.elf ${BUILD_DIR}/shell.map &: ${USER_OBJ} ${COMMON_OBJ} ${BUILD_DIR}/stdlib.a user.ld
+	${CC} ${CFLAGS} ${UCFLAGS} ${LDFLAGS} -Wl,-Map=${BUILD_DIR}/shell.map -o $@ $^
 
 ${BUILD_DIR}/shell.stripped.elf: ${BUILD_DIR}/shell.elf
 	llvm-strip -UR.comment -so $@ $^
@@ -134,8 +139,8 @@ disk/shell.bin: ${BUILD_DIR}/shell.stripped.elf
 	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ disk/shell.bin
 
 ${BUILD_DIR}/kernel.elf: $(call guard,CFLAGSEXTRA)
-${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${STDLIB_OBJ} kernel.ld
-	${CC} ${CFLAGS} ${KCFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
+${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${BUILD_DIR}/stdlib.a kernel.ld
+	${CC} ${CFLAGS} ${KCFLAGS} ${LDFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
 
 ${BUILD_DIR}/disk.tar: ${DISKFILES} disk/shell.bin
 	tar -cf $@ --format=ustar -C disk $(patsubst disk/%,%,$^)
