@@ -343,7 +343,8 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     hl->idle_proc = create_process(NULL, 0);
     set_current_proc(hl->idle_proc);
 
-    process *proc = create_process(_binary___build_shell_bin_start, (size_t)_binary___build_shell_bin_size);
+    struct file *file = fs_lookup("shell.bin");
+    process *proc = create_process(file->data, file->size);
 
     kprintf("Starting process %d...\n\n", proc->pid);
     yield();

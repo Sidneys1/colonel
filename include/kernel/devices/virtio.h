@@ -77,8 +77,9 @@ struct virtio_blk_req {
     uint8_t status;
 } __attribute__((packed));
 
-#define FILES_MAX      2
-#define DISK_MAX_SIZE  align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
+#define FILES_MAX      1
+// #define DISK_MAX_SIZE  align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
+#define DISK_MAX_SIZE  align_up(81920, SECTOR_SIZE)
 
 struct tar_header {
     char name[100];
@@ -105,7 +106,7 @@ struct tar_header {
 struct file {
     bool in_use;      // Indicates if this file entry is in use
     char name[100];   // File name
-    char data[1024];  // File content
+    char data[76240];  // File content
     size_t size;      // File size
 };
 

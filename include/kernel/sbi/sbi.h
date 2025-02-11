@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #define SBI_EXT_BASE 0x10
 enum : uint32_t {
     SBI_BASE_FN_GET_SPEC_VERSION,
@@ -24,7 +26,7 @@ enum : uint32_t {
     SBI_HSM_FN_HART_GET_STATUS,
     SBI_HSM_FN_HART_SUSPEND
 };
-enum SBI_HSM_STATE : uint32_t {
+enum SBI_HSM_STATE : int32_t {
     SBI_HSM_STATE_STARTED,
     SBI_HSM_STATE_STOPPED,
     SBI_HSM_STATE_START_PENDING,

@@ -52,7 +52,7 @@ struct trap_frame {
 
 #define kprintf(fmt, ...) do { \
     uint32_t time = READ_CSR(time); \
-    printf("\033[90m[kernel %d.%d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000 __VA_OPT__(,) __VA_ARGS__); \
+    printf("\033[90m[kernel %3d.%03d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000 __VA_OPT__(,) __VA_ARGS__); \
 } while (0)
 
 #ifdef DEBUG
