@@ -2,6 +2,7 @@
 #include <sbi/sbi.h>
 #include <common.h>
 #include <stdio.h>
+#include <string.h>
 
 sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                        long arg5, long fid, long eid) {
@@ -24,7 +25,7 @@ sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
 
 void probe_sbi_extension(long eid, const char * name) {
     struct sbiret value = sbi_call(eid, 0, 0, 0, 0, 0, SBI_BASE_FN_PROBE_EXTENSION, SBI_EXT_BASE);
-    kprintf("probe_extension[0x%x]: value=%s0x%x %s\033[0m\terror=%d\t(%s Extension)\n", eid, value.value ? "\033[32m" : "\033[31m", value.value, value.value ? "(available)    " : "(not available)", value.error, name);
+    kprintf("probe_extension[0x%x]: value=%s0x%x %s\033[0m\terror=%d\t(%s Extension)\n", eid, value.value ? CSTR("\033[32m") : CSTR("\033[31m"), value.value, value.value ? CSTR("(available)    ") : CSTR("(not available)"), value.error, name);
 }
 
 enum SBI_HSM_STATE hart_get_status(long hartid) {
@@ -32,7 +33,7 @@ enum SBI_HSM_STATE hart_get_status(long hartid) {
     if (value.error == -3)
         return SBI_HSM_STATE_ERROR;
     // kprintf("hart_get_status[%d] (Hart State Management Extension): value=0x%x %s\terror=%d %s\n",
-    //     hartid, 
+    //     hartid,
     //     value.value,
     //     value.value == SBI_HSM_STATE_STARTED
     //         ? "(started)        "

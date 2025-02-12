@@ -2,6 +2,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define PAGE_SIZE 4096
+
 #define WAIT_FOR_INTERRUPT() __asm__ ( \
     "wfi" \
     : \
@@ -69,7 +71,7 @@ struct trap_frame {
 
 #define PANIC(fmt, ...)                                                        \
     do {                                                                       \
-        kprintf("PANIC: %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
+        kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
         while (1) {}                                                           \
     } while (0)
 

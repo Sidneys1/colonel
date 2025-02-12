@@ -5,6 +5,7 @@
 #include <devices/virtio.h>
 #include <stdio.h>
 #include <harts.h>
+#include <string.h>
 
 extern char __kernel_base[], __free_ram_end[];
 
@@ -120,7 +121,7 @@ struct process *create_process(const void *image, size_t image_size) {
     return proc;
 }
 
-void yield() {
+void kyield(void) {
     // Search for a runnable process
     hart_local *hl = get_hart_local();
     process *current_proc = get_current_proc();
@@ -158,4 +159,8 @@ void yield() {
     );
 
     switch_context(&prev->sp, &next->sp);
+}
+
+void yield(void) {
+    kyield();
 }

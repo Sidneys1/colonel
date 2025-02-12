@@ -1,5 +1,6 @@
 #include <memory/page_allocator.h>
 #include <common.h>
+#include <string.h>
 #include <kernel.h>
 
 extern char __free_ram[], __free_ram_end[];

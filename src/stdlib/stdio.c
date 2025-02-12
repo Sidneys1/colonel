@@ -720,6 +720,34 @@ int _vsnprintf(out_fct_type out, char *restrict buffer, const size_t maxlen, con
         }
 
         case 's': {
+            const const_string s = va_arg(va, const_string);
+            unsigned int l = strlen(s);
+            if (precision && l > precision) l = precision;
+            // pre padding
+            if (flags & FLAGS_PRECISION) {
+                l = (l < precision ? l : precision);
+            }
+            if (!(flags * FLAGS_LEFT)) {
+                while (l++ < width) {
+                    out(' ', buffer, idx++, maxlen);
+                }
+            }
+            // string output
+            const char* p = s.head;
+            while ((p < s.tail) && (!(flags & FLAGS_PRECISION) || precision--)) {
+                out(*(p++), buffer, idx++, maxlen);
+            }
+            // post padding
+            if (flags & FLAGS_LEFT) {
+                while (l++ < width) {
+                    out(' ', buffer, idx++, maxlen);
+                }
+            }
+            format++;
+            break;
+        }
+
+        case 'S': {
             const char *p = va_arg(va, char *);
             unsigned int l = strnlen_s(p, precision ? precision : (size_t)-1);
             // pre padding

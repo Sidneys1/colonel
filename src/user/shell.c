@@ -1,6 +1,7 @@
 #include <user.h>
 #include <common.h>
 #include <stdio.h>
+#include <string.h>
 
 void main(void) {
     // yield();
@@ -21,35 +22,28 @@ prompt:
                 if (i == 0) continue;
                 cmdline[--i] = '\0';
                 printf("\b \b");
-            // } else if (ch == '\033') {
-            //     printf("\nESCAPE part 1: \\033\n");
-            //     ch = getchar();
-            //     // if (ch == '[') {
-            //     //     ch = getchar();
-            //     //     printf("\n\nESCAPE: \\033[ 0x%x (%d)\n\n> %s", ch, ch, cmdline);
-            //     // }                        
-            //     printf("\nESCAPE part 2: \\033 0x%x (%d)\n\n> %s", ch, ch, cmdline);
             } else if (ch < 31) {
-                printf("\n\nUnknown input: 0x%x (%d)\n\n> %s", ch, ch, cmdline);
+                printf("\n\nUnknown input: 0x%x (%d)\n\n> %S", ch, ch, cmdline);
             } else {
                 cmdline[i++] = ch;
                 putchar(ch);
             }
         }
-
-        if (strcmp(cmdline, "hello") == 0)
+#define IS(x) strncmp(cmdline, x, sizeof x) == 0
+        if (IS("hello"))
             printf("Hello world from shell!\n");
-        else if (strcmp(cmdline, "exit") == 0)
+        else if (IS("exit"))
             exit();
-        else if (strcmp(cmdline, "readfile") == 0) {
+        else if (IS("readfile")) {
             char buf[128];
             int len = readfile("hello.txt", buf, sizeof(buf));
             buf[len] = '\0';
-            printf("%s\n", buf);
+            printf("%S\n", buf);
         }
-        else if (strcmp(cmdline, "writefile") == 0)
+        else if (IS("writefile"))
             writefile("hello.txt", "Hello from shell!\n", 19);
         else
-            printf("unknown command: %s\n", cmdline);
+            printf("unknown command: %S\n", cmdline);
+#undef IS
     }
 }

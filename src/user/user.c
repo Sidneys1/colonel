@@ -1,8 +1,9 @@
-#include "user.h"
+#include <user.h>
+#include <common.h>
 
 extern char __stack_top[];
 
-int syscall(int sysno, int arg0, int arg1, int arg2) {
+static inline int syscall(int sysno, int arg0, int arg1, int arg2) {
     register int a0 __asm__("a0") = arg0;
     register int a1 __asm__("a1") = arg1;
     register int a2 __asm__("a2") = arg2;

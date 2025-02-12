@@ -1,18 +1,20 @@
 #include <kernel.h>
-#include <stdio.h>
 
-#include <sbi/sbi.h>
+#include <devices/device_tree.h>
+#include <devices/virtio.h>
+#include <harts.h>
 #include <memory_mgmt.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
 #include <process.h>
-#include <devices/device_tree.h>
-#include <devices/virtio.h>
-#include <harts.h>
+#include <sbi/sbi.h>
 
 #include <common.h>
 
-extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[], _binary___build_shell_bin_start[], _binary___build_shell_bin_size[];
+#include <stdio.h>
+#include <string.h>
+
+extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
 extern struct file files[FILES_MAX];
 extern struct process procs[PROCS_MAX];
 
@@ -223,7 +225,7 @@ void kernel_shutdown(uint32_t hartid) {
                 still_running |= 0x1 << hid;
             }
         }
-        
+
         if (still_running) {
             sbiret value = sbi_call(still_running, 0, 0, 0, 0, 0, SBI_IPI_FN_SEND_IPI, SBI_EXT_IPI);
             // kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value, value.error);
@@ -278,7 +280,7 @@ struct test {
     char * bat;
 };
 
-void secondary_boot();
+void secondary_boot(void);
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     memset(__bss, 0, (size_t) __bss_end - (size_t)__bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
@@ -335,19 +337,19 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
         sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
     }
 
-    virtio_blk_init();
+    // virtio_blk_init();
 
-    fs_init();
+    // fs_init();
 
-    hart_local *hl = get_hart_local();
-    hl->idle_proc = create_process(NULL, 0);
-    set_current_proc(hl->idle_proc);
+    // hart_local *hl = get_hart_local();
+    // hl->idle_proc = create_process(NULL, 0);
+    // set_current_proc(hl->idle_proc);
 
-    struct file *file = fs_lookup("shell.bin");
-    process *proc = create_process(file->data, file->size);
+    // struct file *file = fs_lookup("shell.bin");
+    // process *proc = create_process(file->data, file->size);
 
-    kprintf("Starting process %d...\n\n", proc->pid);
-    yield();
+    // kprintf("Starting process %d...\n\n", proc->pid);
+    // yield();
 #endif
 
     // Shutdown?
@@ -387,7 +389,7 @@ void handle_syscall(struct trap_frame *f) {
             int len = f->a2;
             struct file *file = fs_lookup(filename);
             if (!file) {
-                kprintf("file not found: %s\n", filename);
+                kprintf("file not found: %S\n", filename);
                 f->a0 = -1;
                 break;
             }
@@ -426,7 +428,7 @@ void handle_trap(struct trap_frame *f) {
 }
 
 __attribute__((naked))
-void secondary_boot() {
+void secondary_boot(void) {
     __asm__ __volatile__ (
         "mv a7, a0"
         : // Output operands
@@ -446,7 +448,7 @@ void secondary_boot() {
 
 __attribute__((section(".text.boot")))
 __attribute__((naked))
-void boot() {
+void boot(void) {
     __asm__ __volatile__ (
         "mv a6, a0\n"
         "mv a7, a1"

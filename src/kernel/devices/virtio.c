@@ -2,6 +2,7 @@
 #include <devices/virtio.h>
 #include <stdio.h>
 #include <memory/page_allocator.h>
+#include <string.h>
 
 struct virtio_virtq *blk_request_vq;
 struct virtio_blk_req *blk_req;
@@ -158,16 +159,16 @@ void fs_init(void) {
         if (header->name[0] == '\0')
             break;
 
-        if (strcmp(header->magic, "ustar") != 0)
-            PANIC("invalid tar header: magic=\"%s\"", header->magic);
+        if (strncmp(header->magic, "ustar", 6) != 0)
+            PANIC("invalid tar header: magic=\"%S\"", header->magic);
 
         int filesz = oct2int(header->size, sizeof(header->size));
         struct file *file = &files[i];
         file->in_use = true;
-        strcpy(file->name, header->name);
+        strncpy(file->name, header->name, 100);
         memcpy(file->data, header->data, filesz);
         file->size = filesz;
-        kprintf("file: %s, size=%d\n", file->name, file->size);
+        kprintf("file: %S, size=%d\n", file->name, file->size);
 
         off += align_up(sizeof(struct tar_header) + filesz, SECTOR_SIZE);
     }
@@ -184,10 +185,10 @@ void fs_flush(void) {
 
         struct tar_header *header = (struct tar_header *) &disk[off];
         memset(header, 0, sizeof(*header));
-        strcpy(header->name, file->name);
-        strcpy(header->mode, "000644");
-        strcpy(header->magic, "ustar");
-        strcpy(header->version, "00");
+        strncpy(header->name, file->name, sizeof header->name);
+        strncpy(header->mode, "000644", sizeof header->mode);
+        strncpy(header->magic, "ustar", sizeof header->magic);
+        strncpy(header->version, "00", sizeof header->version);
         header->type = '0';
 
         // Turn the file size into an octal string.
@@ -222,7 +223,7 @@ void fs_flush(void) {
 struct file *fs_lookup(const char *filename) {
     for (int i = 0; i < FILES_MAX; i++) {
         struct file *file = &files[i];
-        if (!strcmp(file->name, filename))
+        if (!strncmp(file->name, filename, sizeof file->name))
             return file;
     }
 

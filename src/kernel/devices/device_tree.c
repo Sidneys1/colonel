@@ -2,6 +2,9 @@
 #include <common.h>
 #include <devices/device_tree.h>
 #include <stdio.h>
+#include <string.h>
+
+#define MAX_NODE_NAME_LENGTH 1000
 
 typedef struct fdt_reserve_entry {
     uint64_t address;
@@ -24,8 +27,8 @@ static void print_property_stringlist(const char* string_list, uint32_t len) {
     printf("<stringlist> [");
     size_t inc = 0;
     do {
-        printf("`\033[32m%s\033[0m`", string_list + inc);
-        inc += strlen(string_list + inc) + 1;
+        printf("`\033[32m%S\033[0m`", string_list + inc);
+        inc += strnlen_s(string_list + inc, MAX_NODE_NAME_LENGTH) + 1;
         if (inc >= len)
             break;
         printf(", ");
@@ -43,15 +46,15 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
     struct fdt_node self = {name, NULL};
     if (root == NULL) root = &self;
 
-    uint32_t len = strlen(name);
+    uint32_t len = strnlen_s(name, MAX_NODE_NAME_LENGTH);
     printf(" 0x%p \033[32m", token);
     struct fdt_node *ptr = root;
     while (ptr != &self) {
-        printf("%s/", ptr->name);
+        printf("%S/", ptr->name);
         if (ptr->next == NULL) break;
         ptr = ptr->next;
     }
-    printf("%s\033[0m\n", root == &self ? "/" : name);
+    printf("%S\033[0m\n", root == &self ? "/" : name);
 
     if (ptr != &self) ptr->next = &self;
 
@@ -78,8 +81,8 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             const char* name = strings+be_to_le(prop->nameoff);
             for (size_t i = 0; i < depth + 1; i++)
                 printf("│  ");
-            printf("├ prop {len=%d} %s: ", be_to_le(prop->len), name);
-#define IS(x) strcmp(name, x) == 0
+            printf("├ prop {len=%d} %S: ", be_to_le(prop->len), name);
+#define IS(x) strncmp(name, x, sizeof x) == 0
             if (be_to_le(prop->len) == 0) {
                 // Do nothing
                 printf("<empty>");
@@ -120,7 +123,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             } else if (IS("model") || IS("bootargs") || IS("stdout-path") || IS("device_type") || IS("status") || IS("mmu-type") || IS("riscv,isa")) {
                 /* STRING */
                 const char* string = (char*)(prop + 1);
-                printf("<string> `\033[32m%s\033[0m`", string);
+                printf("<string> `\033[32m%S\033[0m`", string);
             } else if (IS("interrupts")|| IS("interrupt-map-mask") || IS("interrupt-map") || IS("ranges") || IS("bus-range")|| IS("interrupts-extended")) {
                 printf("\033[33m<Unknown custom property type!>\033[0m");
             } else {
@@ -152,13 +155,13 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
 
     for (size_t i = 0; i < depth; i++)
         printf("│");
-    printf("╰─ /%s (\033[31mwith errors\033[0m)\n", name);
+    printf("╰─ /%S (\033[31mwith errors\033[0m)\n", name);
     return token;
 }
 
 extern bool kernel_verbose;
 
-#define IS(x) strcmp(name, x) == 0
+#define IS(x) strncmp(name, x, sizeof x) == 0
 enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, const char* strings, uint32_t address_cells, uint32_t size_cells) {
     bool cont = true;
 
@@ -166,7 +169,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
     struct fdt_node self = {node_name, NULL};
     if (root == NULL) root = &self;
 
-    uint32_t len = strlen(node_name);
+    uint32_t len = strnlen_s(node_name, MAX_NODE_NAME_LENGTH);
     struct fdt_node *ptr = root;
     while (ptr != &self) {
         if (ptr->next == NULL) break;
@@ -189,9 +192,9 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
             const fdt_prop *prop = (fdt_prop*)((uint32_t)token + 4);
             const char* name = strings+be_to_le(prop->nameoff);
 
-            if (IS("bootargs") && strcmp(node_name, "chosen") == 0) {
-                kprintf("Found boot args! `%s`\n", (char*)(prop + 1));
-                if (strcmp((char*)(prop + 1), "verbose") == 0) {
+            if (IS("bootargs") && strncmp(node_name, "chosen", 7) == 0) {
+                kprintf("Found boot args! `%S`\n", (char*)(prop + 1));
+                if (strncmp((char*)(prop + 1), "verbose", 8) == 0) {
                     kernel_verbose = true;
                     kprintf("Kernel is now in VERBOSE mode.\n");
                 }
@@ -228,7 +231,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
 
     // for (size_t i = 0; i < depth; i++)
     //     printf("│");
-    // printf("╰─ /%s (\033[31mwith errors\033[0m)\n", name);
+    // printf("╰─ /%S (\033[31mwith errors\033[0m)\n", name);
     return token;
 }
 #undef IS

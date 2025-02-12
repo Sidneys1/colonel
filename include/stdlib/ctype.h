@@ -1,3 +1,3 @@
 #pragma once
 
-bool isdigit(char c);
+extern inline bool isdigit(char c);

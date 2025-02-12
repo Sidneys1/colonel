@@ -15,7 +15,7 @@ CC:=bear --append --output compile_commands.json -- clang
 # "extra" CFLAGS. By default, we build in DEBUG mode.
 CFLAGSEXTRA?=-DDEBUG -O0 -ggdb
 # Cflags. Appends CFLAGSEXTRA.
-CFLAGS=-std=c23 -Wall -Wextra --target=riscv32 -march=rv32gc -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
+CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32gc -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
 KCFLAGS:=-isystem ./include/kernel/
 # Extra user-mode flags.
@@ -131,7 +131,7 @@ disk/shell.bin: ${BUILD_DIR}/shell.stripped.elf
 	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ disk/shell.bin
 
 ${BUILD_DIR}/kernel.elf: $(call guard,CFLAGSEXTRA)
-${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${STDLIB_OBJ} kernel.ld  
+${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${STDLIB_OBJ} kernel.ld
 	${CC} ${CFLAGS} ${KCFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
 
 ${BUILD_DIR}/disk.tar: ${DISKFILES} disk/shell.bin
