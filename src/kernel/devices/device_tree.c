@@ -1,6 +1,6 @@
-#include <kernel.h>
 #include <common.h>
 #include <devices/device_tree.h>
+#include <kernel.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -11,7 +11,13 @@ typedef struct fdt_reserve_entry {
     uint64_t size;
 } fdt_reserve_entry;
 
-enum FDT_TOKEN { FDT_BEGIN_NODE = 1, FDT_END_NODE, FDT_PROP, FDT_NOP, FDT_END };
+enum FDT_TOKEN {
+    FDT_BEGIN_NODE = 1,
+    FDT_END_NODE,
+    FDT_PROP,
+    FDT_NOP,
+    FDT_END
+};
 
 typedef struct fdt_prop {
     uint32_t len;
@@ -19,11 +25,11 @@ typedef struct fdt_prop {
 } fdt_prop;
 
 struct fdt_node {
-    const char* name;
+    const char *name;
     struct fdt_node *next;
 };
 
-static void print_property_stringlist(const char* string_list, uint32_t len) {
+static void print_property_stringlist(const char *string_list, uint32_t len) {
     printf("<stringlist> [");
     size_t inc = 0;
     do {
@@ -36,27 +42,31 @@ static void print_property_stringlist(const char* string_list, uint32_t len) {
     putchar(']');
 }
 
-enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const char* strings, size_t depth, uint32_t address_cells, uint32_t size_cells) {
+enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const char *strings, size_t depth,
+                           uint32_t address_cells, uint32_t size_cells) {
     for (size_t i = 0; i < depth; i++)
         printf("│  ");
     printf("├─");
     bool cont = true;
 
-    const char* name = (char*)((uint32_t)token + 4);
+    const char *name = (char *)((uint32_t)token + 4);
     struct fdt_node self = {name, NULL};
-    if (root == NULL) root = &self;
+    if (root == NULL)
+        root = &self;
 
     uint32_t len = strnlen_s(name, MAX_NODE_NAME_LENGTH);
     printf(" 0x%p \033[32m", token);
     struct fdt_node *ptr = root;
     while (ptr != &self) {
         printf("%S/", ptr->name);
-        if (ptr->next == NULL) break;
+        if (ptr->next == NULL)
+            break;
         ptr = ptr->next;
     }
     printf("%S\033[0m\n", root == &self ? "/" : name);
 
-    if (ptr != &self) ptr->next = &self;
+    if (ptr != &self)
+        ptr->next = &self;
 
     token += 1 + (len + sizeof(token)) / sizeof(token);
     bool had_children = false;
@@ -77,8 +87,8 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             return token + 1;
 
         case FDT_PROP: {
-            const fdt_prop *prop = (fdt_prop*)((uint32_t)token + 4);
-            const char* name = strings+be_to_le(prop->nameoff);
+            const fdt_prop *prop = (fdt_prop *)((uint32_t)token + 4);
+            const char *name = strings + be_to_le(prop->nameoff);
             for (size_t i = 0; i < depth + 1; i++)
                 printf("│  ");
             printf("├ prop {len=%d} %S: ", be_to_le(prop->len), name);
@@ -90,41 +100,46 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
                 printf("<cells> address=\033[36m0x");
                 uint32_t ai = 0;
                 for (; ai < address_cells; ai++) {
-                    uint32_t value = be_to_le(*(uint32_t*)(prop + 1 + ai));
+                    uint32_t value = be_to_le(*(uint32_t *)(prop + 1 + ai));
                     printf("%x", value);
                 }
                 printf("\033[0m");
                 if (size_cells) {
                     printf(", size=\033[36m0x");
                     for (uint32_t si = 0; si < size_cells; si++) {
-                        uint32_t value = be_to_le(*(uint32_t*)(prop + 1 + ai + si));
+                        uint32_t value = be_to_le(*(uint32_t *)(prop + 1 + ai + si));
                         printf("%x", value);
                     }
                 }
                 printf("\033[0m");
                 // printf("\033[0m - \033[90mI don't understand this one at the moment...\033[0m", 0);
             } else if (IS("#address-cells")) {
-                uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
+                uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 address_cells = value;
                 printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", value, value);
-            } else if(IS("#size-cells")) {
-                uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
+            } else if (IS("#size-cells")) {
+                uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 size_cells = value;
                 printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", value, value);
-            } else if (IS("virtual-reg") || IS("timebase-frequency") || IS("#interrupt-cells") || IS("clock-frequency") || IS("value") || IS("offset") || IS("riscv,ndev") || IS("regmap") || IS("linux,pci-domain") || IS("bank-width")) {
+            } else if (IS("virtual-reg") || IS("timebase-frequency") || IS("#interrupt-cells") ||
+                       IS("clock-frequency") || IS("value") || IS("offset") || IS("riscv,ndev") || IS("regmap") ||
+                       IS("linux,pci-domain") || IS("bank-width")) {
                 /* U32 */
-                printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", be_to_le(*(uint32_t*)(prop + 1)), be_to_le(*(uint32_t*)(prop + 1)));
+                printf("<u32> \033[36m%d\033[0m (\033[36m0x%x\033[0m)", be_to_le(*(uint32_t *)(prop + 1)),
+                       be_to_le(*(uint32_t *)(prop + 1)));
             } else if (IS("phandle") || IS("interrupt-parent") || IS("cpu")) {
                 /* <phandle> */
-                printf("<phandle> \033[35m0x%x\033[0m", be_to_le(*(uint32_t*)(prop + 1)));
+                printf("<phandle> \033[35m0x%x\033[0m", be_to_le(*(uint32_t *)(prop + 1)));
             } else if (IS("compatible")) {
                 /* STRINGLIST */
-                print_property_stringlist((char*)(prop + 1), be_to_le(prop->len));
-            } else if (IS("model") || IS("bootargs") || IS("stdout-path") || IS("device_type") || IS("status") || IS("mmu-type") || IS("riscv,isa")) {
+                print_property_stringlist((char *)(prop + 1), be_to_le(prop->len));
+            } else if (IS("model") || IS("bootargs") || IS("stdout-path") || IS("device_type") || IS("status") ||
+                       IS("mmu-type") || IS("riscv,isa")) {
                 /* STRING */
-                const char* string = (char*)(prop + 1);
+                const char *string = (char *)(prop + 1);
                 printf("<string> `\033[32m%S\033[0m`", string);
-            } else if (IS("interrupts")|| IS("interrupt-map-mask") || IS("interrupt-map") || IS("ranges") || IS("bus-range")|| IS("interrupts-extended")) {
+            } else if (IS("interrupts") || IS("interrupt-map-mask") || IS("interrupt-map") || IS("ranges") ||
+                       IS("bus-range") || IS("interrupts-extended")) {
                 printf("\033[33m<Unknown custom property type!>\033[0m");
             } else {
                 PANIC("\033[33m<Unhandled property type!>\033[0m");
@@ -135,7 +150,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             uint32_t next_addr = ((uint32_t)(prop + 1)) + be_to_le(prop->len);
             if (next_addr % 4)
                 next_addr += 4 - (next_addr % 4);
-            token = (enum FDT_TOKEN*)(next_addr);
+            token = (enum FDT_TOKEN *)(next_addr);
         } break;
 
         case FDT_NOP:
@@ -162,20 +177,24 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
 extern bool kernel_verbose;
 
 #define IS(x) strncmp(name, x, sizeof x) == 0
-enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, const char* strings, uint32_t address_cells, uint32_t size_cells) {
+enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, const char *strings, uint32_t address_cells,
+                              uint32_t size_cells) {
     bool cont = true;
 
-    const char* node_name = (char*)((uint32_t)token + 4);
+    const char *node_name = (char *)((uint32_t)token + 4);
     struct fdt_node self = {node_name, NULL};
-    if (root == NULL) root = &self;
+    if (root == NULL)
+        root = &self;
 
     uint32_t len = strnlen_s(node_name, MAX_NODE_NAME_LENGTH);
     struct fdt_node *ptr = root;
     while (ptr != &self) {
-        if (ptr->next == NULL) break;
+        if (ptr->next == NULL)
+            break;
         ptr = ptr->next;
     }
-    if (ptr != &self) ptr->next = &self;
+    if (ptr != &self)
+        ptr->next = &self;
 
     token += 1 + (len + sizeof(token)) / sizeof(token);
     do {
@@ -189,20 +208,20 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
             return token + 1;
 
         case FDT_PROP: {
-            const fdt_prop *prop = (fdt_prop*)((uint32_t)token + 4);
-            const char* name = strings+be_to_le(prop->nameoff);
+            const fdt_prop *prop = (fdt_prop *)((uint32_t)token + 4);
+            const char *name = strings + be_to_le(prop->nameoff);
 
             if (IS("bootargs") && strncmp(node_name, "chosen", 7) == 0) {
-                kprintf("Found boot args! `%S`\n", (char*)(prop + 1));
-                if (strncmp((char*)(prop + 1), "verbose", 8) == 0) {
+                kprintf("Found boot args! `%S`\n", (char *)(prop + 1));
+                if (strncmp((char *)(prop + 1), "verbose", 8) == 0) {
                     kernel_verbose = true;
                     kprintf("Kernel is now in VERBOSE mode.\n");
                 }
             } else if (IS("#address-cells")) {
-                uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
+                uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 address_cells = value;
-            } else if(IS("#size-cells")) {
-                uint32_t value = be_to_le(*(uint32_t*)(prop + 1));
+            } else if (IS("#size-cells")) {
+                uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 size_cells = value;
             }
 
@@ -210,7 +229,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
             uint32_t next_addr = ((uint32_t)(prop + 1)) + be_to_le(prop->len);
             if (next_addr % 4)
                 next_addr += 4 - (next_addr % 4);
-            token = (enum FDT_TOKEN*)(next_addr);
+            token = (enum FDT_TOKEN *)(next_addr);
         } break;
 
         case FDT_NOP:
@@ -240,8 +259,8 @@ void inspect_device_tree(const fdt_header *fdt) {
     if (fdt->magic != 0xedfe0dd0)
         PANIC("Could not find FDT magic at 0x%p!\n", fdt);
 
-    const char* strings = (char*)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
-    enum FDT_TOKEN *token = (enum FDT_TOKEN*)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
+    const char *strings = (char *)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
+    enum FDT_TOKEN *token = (enum FDT_TOKEN *)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
 
     traverse_node(NULL, token, strings, 2, 1);
     if (kernel_verbose) {
@@ -250,15 +269,17 @@ void inspect_device_tree(const fdt_header *fdt) {
         kprintf("FDT total size is %d bytes\n", be_to_le(fdt->totalsize));
         kprintf("Strings size is %d bytes\n", be_to_le(fdt->size_dt_strings));
         kprintf("Devicetree size is %d bytes\n", be_to_le(fdt->size_dt_struct));
-        const fdt_reserve_entry *entries = (void*)((uint32_t)fdt + be_to_le(fdt->off_mem_rsvmap));
-        kprintf("Reserved entries table starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_mem_rsvmap), entries);
+        const fdt_reserve_entry *entries = (void *)((uint32_t)fdt + be_to_le(fdt->off_mem_rsvmap));
+        kprintf("Reserved entries table starts %d bytes after the FDT header (at 0x%p).\n",
+                be_to_le(fdt->off_mem_rsvmap), entries);
         long i = 0;
         while ((entries[i].address + entries[i].size) != 0) {
             kprintf("Entry at %d: %x (%d)\n", i, entries[i].address, entries[i].size);
             ++i;
         }
         kprintf("There are %d reserved memory ranges in the device tree.\n", i);
-        kprintf("Strings block starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_strings), strings);
+        kprintf("Strings block starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_strings),
+                strings);
         kprintf("Device tree starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_struct), token);
 
         print_node(NULL, token, strings, 0, 2, 1);

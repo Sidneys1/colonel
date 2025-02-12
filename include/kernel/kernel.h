@@ -4,12 +4,7 @@
 
 #define PAGE_SIZE 4096
 
-#define WAIT_FOR_INTERRUPT() __asm__ ( \
-    "wfi" \
-    : \
-    : \
-    : \
-);
+#define WAIT_FOR_INTERRUPT() __asm__("wfi" : : :);
 
 struct trap_frame {
     uint32_t ra;
@@ -45,17 +40,19 @@ struct trap_frame {
     uint32_t sp;
 } __attribute__((packed));
 
-#define READ_CSR(reg)                                                          \
-    ({                                                                         \
-        unsigned long __tmp;                                                   \
-        __asm__ __volatile__("csrr %0, " #reg : "=r"(__tmp));                  \
-        __tmp;                                                                 \
+#define READ_CSR(reg)                                                                                                  \
+    ({                                                                                                                 \
+        unsigned long __tmp;                                                                                           \
+        __asm__ __volatile__("csrr %0, " #reg : "=r"(__tmp));                                                          \
+        __tmp;                                                                                                         \
     })
 
-#define kprintf(fmt, ...) do { \
-    uint32_t time = READ_CSR(time); \
-    printf("\033[90m[kernel %3d.%03d] " fmt "\033[0m", time / 10000000, (time % 10000000) / 10000 __VA_OPT__(,) __VA_ARGS__); \
-} while (0)
+#define kprintf(fmt, ...)                                                                                              \
+    do {                                                                                                               \
+        uint32_t time = READ_CSR(time);                                                                                \
+        printf("\033[90m[kernel %3d.%03d] " fmt "\033[0m", time / 10000000,                                            \
+               (time % 10000000) / 10000 __VA_OPT__(, ) __VA_ARGS__);                                                  \
+    } while (0)
 
 #ifdef DEBUG
 #define KDBG(...) kprintf(__VA_ARGS__)
@@ -63,27 +60,28 @@ struct trap_frame {
 #define KDBG(...)
 #endif
 
-#define WRITE_CSR(reg, value)                                                  \
-    do {                                                                       \
-        uint32_t __tmp = (value);                                              \
-        __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                \
+#define WRITE_CSR(reg, value)                                                                                          \
+    do {                                                                                                               \
+        uint32_t __tmp = (value);                                                                                      \
+        __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                                                        \
     } while (0)
 
-#define PANIC(fmt, ...)                                                        \
-    do {                                                                       \
-        kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
-        while (1) {}                                                           \
+#define PANIC(fmt, ...)                                                                                                \
+    do {                                                                                                               \
+        kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);                                         \
+        while (1) {                                                                                                    \
+        }                                                                                                              \
     } while (0)
 
 #define SATP_SV32 (1u << 31)
-#define PAGE_V    (1 << 0)   // "Valid" bit (entry is enabled)
-#define PAGE_R    (1 << 1)   // Readable
-#define PAGE_W    (1 << 2)   // Writable
-#define PAGE_X    (1 << 3)   // Executable
-#define PAGE_U    (1 << 4)   // User (accessible in user mode)
+#define PAGE_V    (1 << 0) // "Valid" bit (entry is enabled)
+#define PAGE_R    (1 << 1) // Readable
+#define PAGE_W    (1 << 2) // Writable
+#define PAGE_X    (1 << 3) // Executable
+#define PAGE_U    (1 << 4) // User (accessible in user mode)
 
-#define USER_BASE 0x1000000
+#define USER_BASE    0x1000000
 #define SSTATUS_SPIE (1 << 5)
 #define SSTATUS_SUM  (1 << 18)
 #define SCAUSE_ECALL 8
-#define PROC_EXITED   2
+#define PROC_EXITED  2

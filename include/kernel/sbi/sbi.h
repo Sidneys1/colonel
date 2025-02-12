@@ -19,7 +19,7 @@ enum : uint32_t {
     SBI_TIME_FN_SET_TIMER,
 };
 
-#define SBI_EXT_HSM  0x48534d
+#define SBI_EXT_HSM 0x48534d
 enum : uint32_t {
     SBI_HSM_FN_HART_START,
     SBI_HSM_FN_HART_STOP,
@@ -63,8 +63,7 @@ typedef struct sbiret {
     long value;
 } sbiret;
 
-sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
-                       long arg5, long fid, long eid);
+sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4, long arg5, long fid, long eid);
 
 void probe_sbi_extension(long eid, const char *name);
 enum SBI_HSM_STATE hart_get_status(long hartid);

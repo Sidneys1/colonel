@@ -50,7 +50,7 @@ DEPS:=$(call rwildcard,build,*.d)
 # Files needed for building disk image (tar).
 DISKFILES:=$(wildcard disk/*)
 
-.PHONY: all run run-quiet debug test tidy clean shell kernel disk
+.PHONY: all run run-quiet debug test tidy format clean shell kernel disk
 .INTERMEDIATE: ${BUILD_DIR}/shell.bin
 .NOTPARALLEL: test
 
@@ -88,6 +88,9 @@ test:
 
 tidy:
 	clang-tidy -system-headers -header-filter=".*" -p ${BUILD_DIR} ${KERNEL_SRC} ${COMMON_SRC} ${USER_SRC} ${STDLIB_SRC}
+
+format:
+	clang-format -i $$(find src/ include/ -name '*.h' -o -name '*.c')
 
 clean:
 	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json

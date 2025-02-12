@@ -1,7 +1,7 @@
-#include <stddef.h>
 #include <common.h>
 #include <kernel.h>
 #include <memory/slab_allocator.h>
+#include <stddef.h>
 #include <stdio.h>
 
 #include <memory_mgmt.h>
@@ -118,7 +118,7 @@
                 break;*/                                                                                               \
                                                                                                                        \
             if (prev == NULL) {                                                                                        \
-                SLAB_DBG("\tCache is the first entry in %s...\n", full ? CSTR("full list") : CSTR("partial list"));                \
+                SLAB_DBG("\tCache is the first entry in %s...\n", full ? CSTR("full list") : CSTR("partial list"));    \
                 if (full) {                                                                                            \
                     slab->first_full = cache->next_cache;                                                              \
                     SLAB_DBG("\tslab->first_full is now 0x%p...\n", slab->first_full);                                 \
@@ -133,8 +133,8 @@
                 slab->first_partial = cache;                                                                           \
             else                                                                                                       \
                 slab->first_empty = cache;                                                                             \
-            SLAB_DBG("Moved %s %s slab to the head of the %s list!\n", prev == NULL ? CSTR("the last") : CSTR("a"),                \
-                     full ? CSTR("full") : CSTR("partial"), full ? CSTR("partial") : CSTR("free"));                                            \
+            SLAB_DBG("Moved %s %s slab to the head of the %s list!\n", prev == NULL ? CSTR("the last") : CSTR("a"),    \
+                     full ? CSTR("full") : CSTR("partial"), full ? CSTR("partial") : CSTR("free"));                    \
         }                                                                                                              \
     }                                                                                                                  \
                                                                                                                        \

@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <stddef.h>
 
 typedef struct fdt_header {

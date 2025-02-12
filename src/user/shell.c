@@ -1,13 +1,14 @@
-#include <user.h>
 #include <common.h>
 #include <stdio.h>
 #include <string.h>
+#include <user.h>
 
 void main(void) {
     // yield();
     while (1) {
-prompt:
+    prompt:
         printf("> ");
+        flush();
         char cmdline[128] = {};
         for (int i = 0;;) {
             char ch = getchar();
@@ -19,14 +20,18 @@ prompt:
                 cmdline[i] = '\0';
                 break;
             } else if (ch == '\177') {
-                if (i == 0) continue;
+                if (i == 0)
+                    continue;
                 cmdline[--i] = '\0';
                 printf("\b \b");
+                flush();
             } else if (ch < 31) {
                 printf("\n\nUnknown input: 0x%x (%d)\n\n> %S", ch, ch, cmdline);
+                flush();
             } else {
                 cmdline[i++] = ch;
                 putchar(ch);
+                flush();
             }
         }
 #define IS(x) strncmp(cmdline, x, sizeof x) == 0
@@ -39,8 +44,7 @@ prompt:
             int len = readfile("hello.txt", buf, sizeof(buf));
             buf[len] = '\0';
             printf("%S\n", buf);
-        }
-        else if (IS("writefile"))
+        } else if (IS("writefile"))
             writefile("hello.txt", "Hello from shell!\n", 19);
         else
             printf("unknown command: %S\n", cmdline);

@@ -1,11 +1,9 @@
+#include <common.h>
 #include <kernel.h>
 #include <sbi/sbi.h>
-#include <common.h>
-#include <stdio.h>
 #include <string.h>
 
-sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
-                       long arg5, long fid, long eid) {
+sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4, long arg5, long fid, long eid) {
     register long a0 __asm__("a0") = arg0;
     register long a1 __asm__("a1") = arg1;
     register long a2 __asm__("a2") = arg2;
@@ -17,15 +15,16 @@ sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
 
     __asm__ __volatile__("ecall"
                          : "=r"(a0), "=r"(a1)
-                         : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5),
-                           "r"(a6), "r"(a7)
+                         : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(a6), "r"(a7)
                          : "memory");
     return (sbiret){.error = a0, .value = a1};
 }
 
-void probe_sbi_extension(long eid, const char * name) {
+void probe_sbi_extension(long eid, const char *name) {
     struct sbiret value = sbi_call(eid, 0, 0, 0, 0, 0, SBI_BASE_FN_PROBE_EXTENSION, SBI_EXT_BASE);
-    kprintf("probe_extension[0x%x]: value=%s0x%x %s\033[0m\terror=%d\t(%s Extension)\n", eid, value.value ? CSTR("\033[32m") : CSTR("\033[31m"), value.value, value.value ? CSTR("(available)    ") : CSTR("(not available)"), value.error, name);
+    kprintf("probe_extension[0x%x]: value=%s0x%x %s\033[0m\terror=%d\t(%s Extension)\n", eid,
+            value.value ? CSTR("\033[32m") : CSTR("\033[31m"), value.value,
+            value.value ? CSTR("(available)    ") : CSTR("(not available)"), value.error, name);
 }
 
 enum SBI_HSM_STATE hart_get_status(long hartid) {

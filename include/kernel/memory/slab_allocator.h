@@ -39,12 +39,12 @@ SLAB(32)
 #define _SLAB_GENERIC_CASE(f, SIZE) struct slab_##SIZE * : f##_##SIZE
 #define _SLAB_GENERIC_PARAMS(f)                                                                                        \
     _SLAB_GENERIC_CASE(f, 4), _SLAB_GENERIC_CASE(f, 8), _SLAB_GENERIC_CASE(f, 16), _SLAB_GENERIC_CASE(f, 32)
-#define _SLAB_GENERIC_1(f, X) _Generic((X), _SLAB_GENERIC_PARAMS(f))(X)
+#define _SLAB_GENERIC_1(f, X)    _Generic((X), _SLAB_GENERIC_PARAMS(f))(X)
 #define _SLAB_GENERIC_2(f, X, Y) _Generic((X), _SLAB_GENERIC_PARAMS(f))(X, Y)
 
-#define create_slab(X) _SLAB_GENERIC_1(create_slab, X)
-#define slab_alloc(X) _SLAB_GENERIC_1(slab_alloc, X)
-#define slab_dbg(X) _SLAB_GENERIC_1(slab_dbg, X)
+#define create_slab(X)  _SLAB_GENERIC_1(create_slab, X)
+#define slab_alloc(X)   _SLAB_GENERIC_1(slab_alloc, X)
+#define slab_dbg(X)     _SLAB_GENERIC_1(slab_dbg, X)
 #define slab_free(X, Y) _SLAB_GENERIC_2(slab_free, X, Y)
 
 #ifdef TESTS

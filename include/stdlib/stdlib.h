@@ -1,3 +1,3 @@
 #pragma once
 
-// unsigned int atoui(const char *restrict*nptr);
+_Noreturn void abort(void);

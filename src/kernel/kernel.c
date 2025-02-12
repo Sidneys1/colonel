@@ -3,9 +3,9 @@
 #include <devices/device_tree.h>
 #include <devices/virtio.h>
 #include <harts.h>
-#include <memory_mgmt.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
+#include <memory_mgmt.h>
 #include <process.h>
 #include <sbi/sbi.h>
 
@@ -20,9 +20,9 @@ extern struct process procs[PROCS_MAX];
 
 // Currently running process
 
-__attribute__((naked))
-__attribute__((aligned(4)))
-void kernel_entry(void) {
+_Noreturn void abort(void) { PANIC("Call from abort().\n"); }
+
+__attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
     __asm__ __volatile__(
         // Retrieve the kernel stack of the running process from sscratch
         "csrrw sp, sscratch, sp\n"
@@ -100,8 +100,7 @@ void kernel_entry(void) {
         "lw s10, 4 * 28(sp)\n"
         "lw s11, 4 * 29(sp)\n"
         "lw sp,  4 * 30(sp)\n"
-        "sret\n"
-    );
+        "sret\n");
 }
 
 void secondary_handle_trap(__attribute__((unused)) struct trap_frame *f) {
@@ -120,9 +119,7 @@ void secondary_handle_trap(__attribute__((unused)) struct trap_frame *f) {
     WRITE_CSR(sepc, user_pc);
 }
 
-__attribute__((naked))
-__attribute__((aligned(4)))
-void secondary_entry(void) {
+__attribute__((naked)) __attribute__((aligned(4))) void secondary_entry(void) {
     __asm__ __volatile__(
         // Retrieve the kernel stack of the running process from sscratch
         "csrrw sp, sscratch, sp\n"
@@ -200,8 +197,7 @@ void secondary_entry(void) {
         "lw s10, 4 * 28(sp)\n"
         "lw s11, 4 * 29(sp)\n"
         "lw sp,  4 * 30(sp)\n"
-        "sret\n"
-    );
+        "sret\n");
 }
 
 uint32_t CLOCK_FREQ = 10000000;
@@ -218,7 +214,8 @@ void kernel_shutdown(uint32_t hartid) {
         still_running = 0;
 
         for (uint32_t hid = 0; hid < num_harts; hid++) {
-            if (hid == hartid) continue;
+            if (hid == hartid)
+                continue;
             enum SBI_HSM_STATE status = hart_get_status(hid);
             if (status != SBI_HSM_STATE_STOPPED) {
                 kprintf("[SHUTDOWN] Hart %d is still running/suspended (%d)...\n", hid, status);
@@ -228,7 +225,8 @@ void kernel_shutdown(uint32_t hartid) {
 
         if (still_running) {
             sbiret value = sbi_call(still_running, 0, 0, 0, 0, 0, SBI_IPI_FN_SEND_IPI, SBI_EXT_IPI);
-            // kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value, value.error);
+            // kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value,
+            // value.error);
             if (value.error)
                 PANIC("OOPS: %d!\n", value.error);
 
@@ -247,15 +245,14 @@ void kernel_shutdown(uint32_t hartid) {
 }
 
 void secondary_main(uint32_t hartid) {
-    WRITE_CSR(stvec, (uint32_t) secondary_entry);
+    WRITE_CSR(stvec, (uint32_t)secondary_entry);
     heart_locals[hartid].hartid = hartid;
-    __asm__ __volatile__(
-        "mv gp, %[hartid]\n"
-        "mv tp, %[procid]"
-        : // Output
-        : [hartid] "r" (heart_locals + hartid), // Input
-          [procid] "r" (&heart_locals[hartid].current_proc)
-        : "gp", "tp" // Clobbers
+    __asm__ __volatile__("mv gp, %[hartid]\n"
+                         "mv tp, %[procid]"
+                         :                                      // Output
+                         : [hartid] "r"(heart_locals + hartid), // Input
+                           [procid] "r"(&heart_locals[hartid].current_proc)
+                         : "gp", "tp" // Clobbers
     );
 
     kprintf("[SECONDARY] Hello from hart #%d!\n", get_hart_local()->hartid);
@@ -263,7 +260,8 @@ void secondary_main(uint32_t hartid) {
     sbiret value;
     while (!is_shutting_down) {
         uint32_t time = READ_CSR(time);
-        kprintf("[SECONDARY] CPU uptime: %d ticks. (%d.%ds?)\n", time, time / CLOCK_FREQ, (time % CLOCK_FREQ) / (CLOCK_FREQ / 1000));
+        kprintf("[SECONDARY] CPU uptime: %d ticks. (%d.%ds?)\n", time, time / CLOCK_FREQ,
+                (time % CLOCK_FREQ) / (CLOCK_FREQ / 1000));
         uint32_t future = time + (CLOCK_FREQ * 10);
         sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
         WAIT_FOR_INTERRUPT();
@@ -277,23 +275,21 @@ void secondary_main(uint32_t hartid) {
 struct test {
     uint32_t foo, bar;
     bool baz;
-    char * bat;
+    char *bat;
 };
 
 void secondary_boot(void);
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
-    memset(__bss, 0, (size_t) __bss_end - (size_t)__bss);
-    WRITE_CSR(stvec, (uint32_t) kernel_entry);
+    memset_s(__bss, (size_t)__bss_end - (size_t)__bss, 0, (size_t)__bss_end - (size_t)__bss);
+    WRITE_CSR(stvec, (uint32_t)kernel_entry);
     heart_locals[hartid].hartid = hartid;
-    __asm__ __volatile__(
-        "mv gp, %[hartid]\n"
-        "mv tp, %[procid]"
-        : // Output
-        : [hartid] "r" (heart_locals + hartid), // Input
-          [procid] "r" (&heart_locals[hartid].current_proc)
-        : "gp", "tp" // Clobbers
+    __asm__ __volatile__("mv gp, %[hartid]\n"
+                         "mv tp, %[procid]"
+                         :                                      // Output
+                         : [hartid] "r"(heart_locals + hartid), // Input
+                           [procid] "r"(&heart_locals[hartid].current_proc)
+                         : "gp", "tp" // Clobbers
     );
-
 
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
@@ -337,19 +333,21 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
         sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
     }
 
-    // virtio_blk_init();
+    virtio_blk_init();
 
-    // fs_init();
+    fs_init();
 
-    // hart_local *hl = get_hart_local();
-    // hl->idle_proc = create_process(NULL, 0);
-    // set_current_proc(hl->idle_proc);
+    hart_local *hl = get_hart_local();
+    hl->idle_proc = create_process(NULL, 0);
+    set_current_proc(hl->idle_proc);
 
-    // struct file *file = fs_lookup("shell.bin");
-    // process *proc = create_process(file->data, file->size);
+    struct file *file = fs_lookup("shell.bin");
+    if (!file)
+        PANIC("Could not find `shell.bin`!\n");
+    process *proc = create_process(file->data, file->size);
 
-    // kprintf("Starting process %d...\n\n", proc->pid);
-    // yield();
+    kprintf("Starting process %d...\n\n", proc->pid);
+    yield();
 #endif
 
     // Shutdown?
@@ -359,57 +357,60 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
 void handle_syscall(struct trap_frame *f) {
     // kprintf("Handling syscall on core #%d\n", get_hart_local()->hartid);
     switch (f->a3) {
-        case SYS_YIELD:
-            yield();
-            break;
-        case SYS_PUTCHAR:
-            putchar(f->a0);
-            break;
-        case SYS_GETCHAR:
-            while (1) {
-                long ch = getchar();
-                if (ch >= 0) {
-                    f->a0 = ch;
-                    break;
-                }
-
-                yield();
-            }
-            break;
-        case SYS_EXIT:
-            process *current_proc = get_current_proc();
-            kprintf("process %d exited\n", current_proc->pid);
-            current_proc->state = PROC_EXITED;
-            yield();
-            PANIC("unreachable");
-        case SYS_READFILE:
-        case SYS_WRITEFILE: {
-            const char *filename = (const char *) f->a0;
-            char *buf = (char *) f->a1;
-            int len = f->a2;
-            struct file *file = fs_lookup(filename);
-            if (!file) {
-                kprintf("file not found: %S\n", filename);
-                f->a0 = -1;
+    case SYS_YIELD:
+        yield();
+        break;
+    case SYS_PUTCHAR:
+        putchar(f->a0);
+        break;
+    case SYS_FLUSH:
+        flush();
+        break;
+    case SYS_GETCHAR:
+        while (1) {
+            long ch = getchar();
+            if (ch >= 0) {
+                f->a0 = ch;
                 break;
             }
 
-            if (len > (int) sizeof(file->data))
-                len = file->size;
-
-            if (f->a3 == SYS_WRITEFILE) {
-                memcpy(file->data, buf, len);
-                file->size = len;
-                fs_flush();
-            } else {
-                memcpy(buf, file->data, len);
-            }
-
-            f->a0 = len;
+            yield();
+        }
+        break;
+    case SYS_EXIT:
+        process *current_proc = get_current_proc();
+        kprintf("process %d exited\n", current_proc->pid);
+        current_proc->state = PROC_EXITED;
+        yield();
+        PANIC("unreachable");
+    case SYS_READFILE:
+    case SYS_WRITEFILE: {
+        const char *filename = (const char *)f->a0;
+        char *buf = (char *)f->a1;
+        int len = f->a2;
+        struct file *file = fs_lookup(filename);
+        if (!file) {
+            kprintf("file not found: %S\n", filename);
+            f->a0 = -1;
             break;
         }
-        default:
-            PANIC("unexpected syscall a3=%x\n", f->a3);
+
+        if (len > (int)sizeof(file->data))
+            len = file->size;
+
+        if (f->a3 == SYS_WRITEFILE) {
+            memcpy_s(file->data, sizeof file->data, buf, len);
+            file->size = len;
+            fs_flush();
+        } else {
+            memcpy(buf, file->data, len); // NOLINT
+        }
+
+        f->a0 = len;
+        break;
+    }
+    default:
+        PANIC("unexpected syscall a3=%x\n", f->a3);
     }
 }
 
@@ -427,42 +428,35 @@ void handle_trap(struct trap_frame *f) {
     WRITE_CSR(sepc, user_pc);
 }
 
-__attribute__((naked))
-void secondary_boot(void) {
-    __asm__ __volatile__ (
-        "mv a7, a0"
-        : // Output operands
-        : // input operands
-        : "a7" // clobbers
+__attribute__((naked)) void secondary_boot(void) {
+    __asm__ __volatile__("mv a7, a0"
+                         :      // Output operands
+                         :      // input operands
+                         : "a7" // clobbers
     );
-    __asm__ __volatile__ (
-        "mv sp, a1\n"  // Set the stack pointer
-        "mv a0, a7\n"
-        // "mv a1, a7\n"
-        "call secondary_main" // Jump to kernel_main with restored a0 and a1
-        : // Output operands
-        : // input operands
-        : "sp", "a0" // clobbers
+    __asm__ __volatile__("mv sp, a1\n" // Set the stack pointer
+                         "mv a0, a7\n"
+                         // "mv a1, a7\n"
+                         "call secondary_main" // Jump to kernel_main with restored a0 and a1
+                         :                     // Output operands
+                         :                     // input operands
+                         : "sp", "a0"          // clobbers
     );
 }
 
-__attribute__((section(".text.boot")))
-__attribute__((naked))
-void boot(void) {
-    __asm__ __volatile__ (
-        "mv a6, a0\n"
-        "mv a7, a1"
-        : // Output operands
-        : // input operands
-        : "a6", "a7" // clobbers
+__attribute__((section(".text.boot"))) __attribute__((naked)) void boot(void) {
+    __asm__ __volatile__("mv a6, a0\n"
+                         "mv a7, a1"
+                         :            // Output operands
+                         :            // input operands
+                         : "a6", "a7" // clobbers
     );
-    __asm__ __volatile__ (
-        "mv sp, %[stack_top]\n"  // Set the stack pointer
-        "mv a0, a6\n"
-        "mv a1, a7\n"
-        "call kernel_main" // Jump to kernel_main with restored a0 and a1
-        : // Output operands
-        : [stack_top] "r" (__stack_top) // input operands
-        : "sp", "a0", "a1" // clobbers
+    __asm__ __volatile__("mv sp, %[stack_top]\n" // Set the stack pointer
+                         "mv a0, a6\n"
+                         "mv a1, a7\n"
+                         "call kernel_main"             // Jump to kernel_main with restored a0 and a1
+                         :                              // Output operands
+                         : [stack_top] "r"(__stack_top) // input operands
+                         : "sp", "a0", "a1"             // clobbers
     );
 }

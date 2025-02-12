@@ -1,8 +1,8 @@
 #pragma once
 
-#define NULL  ((void *) 0)
+#define NULL ((void *)0)
 
-#define offsetof(type, member)   __builtin_offsetof(type, member)
+#define offsetof(type, member) __builtin_offsetof(type, member)
 
 typedef char int8_t;
 typedef short int16_t;
