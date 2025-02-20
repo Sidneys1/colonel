@@ -1,20 +1,19 @@
 #include <harts.h>
 #include <kernel.h>
 #include <spinlock.h>
-
-void initlock(struct spinlock *lk, char *name) {
-    lk->name = name;
-    lk->locked = 0;
-    lk->hart = 0;
-}
+#include <riscv.h>
 
 // Check whether this cpu is holding the lock.
 // Interrupts must be off.
-int holding(struct spinlock *lk) { return (lk->locked && lk->hart == get_hart_local()->hartid); }
+bool holding(struct spinlock *lk) {
+  struct hart_local *hart = get_hart_local();
+  return (lk->locked && lk->hart == hart->hartid);
+}
 
 // Acquire the lock.
 // Loops (spins) until the lock is acquired.
 void acquire(struct spinlock *lk) {
+    push_off();;
     // TODO  push_off(); // disable interrupts to avoid deadlock.
     if (holding(lk))
         PANIC("Spinlock is not reentrant!\n");
@@ -33,7 +32,8 @@ void acquire(struct spinlock *lk) {
     __sync_synchronize();
 
     // Record info about lock acquisition for holding() and debugging.
-    lk->hart = get_hart_local()->hartid;
+    struct hart_local *hart = get_hart_local();
+    lk->hart = hart->hartid;
 }
 
 void release(struct spinlock *lk) {
@@ -59,5 +59,27 @@ void release(struct spinlock *lk) {
     //   amoswap.w zero, zero, (s1)
     __sync_lock_release(&lk->locked);
 
-    // TODO   pop_off();
+    pop_off();
+}
+
+void push_off(void) {
+  int old = intr_get();
+  intr_off();
+  struct hart_local *hart = get_hart_local();
+  // printf("Disabling interrupts...\n");
+  if(hart->noff == 0)
+    hart->intena = old;
+  hart->noff += 1;
+}
+
+void pop_off(void) {
+  struct hart_local *c = get_hart_local();
+  if(intr_get())
+    PANIC("pop_off - interruptible\n");
+  if(c->noff < 1)
+    PANIC("pop_off");
+  c->noff -= 1;
+  if(c->noff == 0 && c->intena)
+    intr_on();
+  // printf("Enabling interrupts...\n");
 }

@@ -15,4 +15,6 @@ typedef struct fdt_header {
     uint32_t size_dt_struct;
 } fdt_header;
 
+void device_tree_init(const fdt_header *fdt);
+
 void inspect_device_tree(const fdt_header *fdt);

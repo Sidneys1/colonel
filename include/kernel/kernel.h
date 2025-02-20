@@ -1,6 +1,8 @@
 #pragma once
 #include <stddef.h>
 #include <stdio.h>
+#include <console.h>
+#include <color.h>
 
 #define PAGE_SIZE 4096
 
@@ -50,7 +52,7 @@ struct trap_frame {
 #define kprintf(fmt, ...)                                                                                              \
     do {                                                                                                               \
         uint32_t time = READ_CSR(time);                                                                                \
-        printf("\033[90m[kernel %3d.%03d] " fmt "\033[0m", time / 10000000,                                            \
+        printf(ANSI_GREY "[kernel %3d.%03d] " fmt ANSI_RESET, time / 10000000,                                            \
                (time % 10000000) / 10000 __VA_OPT__(, ) __VA_ARGS__);                                                  \
     } while (0)
 
@@ -68,6 +70,8 @@ struct trap_frame {
 
 #define PANIC(fmt, ...)                                                                                                \
     do {                                                                                                               \
+    kernel_io_config.putc = &sbi_putc;\
+    kernel_io_config.getc = &sbi_getc;\
         kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);                                         \
         while (1) {                                                                                                    \
         }                                                                                                              \
@@ -85,3 +89,6 @@ struct trap_frame {
 #define SSTATUS_SUM  (1 << 18)
 #define SCAUSE_ECALL 8
 #define PROC_EXITED  2
+
+void sbi_putc(char c);
+int sbi_getc();

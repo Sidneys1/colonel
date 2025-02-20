@@ -3,16 +3,19 @@
 
 #include <devices/device_tree.h>
 #include <devices/virtio.h>
-#include <devices/pci.h>
 #include <harts.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
 #include <memory_mgmt.h>
 #include <process.h>
 #include <sbi/sbi.h>
+#include <devices/uart.h>
+#include <devices/plic.h>
+#include <console.h>
 
 #include <common.h>
 
+#include <spinlock.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -26,8 +29,9 @@ _Noreturn void abort(void) { PANIC("Call from abort().\n"); }
 
 __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
     __asm__ __volatile__(
-        // Retrieve the kernel stack of the running process from sscratch
-        "csrrw sp, sscratch, sp\n"
+        // // Retrieve the kernel stack of the running process from sscratch
+        // "csrrw sp, sscratch, sp\n"
+        "csrw sscratch, sp\n" // Save sp into sscratch
         "addi sp, sp, -4 * 31\n"
         "sw ra,  4 * 0(sp)\n"
         "sw gp,  4 * 1(sp)\n"
@@ -64,11 +68,11 @@ __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
         "csrr a0, sscratch\n"
         "sw a0, 4 * 30(sp)\n"
 
-        // Reset the kernel stack
-        "addi a0, sp, 4 * 31\n"
-        "csrw sscratch, a0\n"
+        // // Reset the kernel stack
+        // "addi a0, sp, 4 * 31\n"
+        // "csrw sscratch, a0\n"
 
-        "mv a0, sp\n"
+        // "mv a0, sp\n"
         "call handle_trap\n"
 
         "lw ra,  4 * 0(sp)\n"
@@ -102,6 +106,7 @@ __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
         "lw s10, 4 * 28(sp)\n"
         "lw s11, 4 * 29(sp)\n"
         "lw sp,  4 * 30(sp)\n"
+        // "addi sp, sp, 4 * 31\n"
         "sret\n");
 }
 
@@ -208,6 +213,7 @@ bool kernel_verbose = false;
 volatile bool is_shutting_down = false;
 
 void kernel_shutdown(uint32_t hartid) {
+    // kernel_io_config.putc = &sbi_putc;
     kprintf("[SHUTDOWN] Shutting down from Hart %d. Waiting for all other Harts to stop.\n", hartid);
     is_shutting_down = true;
 
@@ -227,14 +233,14 @@ void kernel_shutdown(uint32_t hartid) {
 
         if (still_running) {
             sbiret value = sbi_call(still_running, 0, 0, 0, 0, 0, SBI_IPI_FN_SEND_IPI, SBI_EXT_IPI);
-            // kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value,
-            // value.error);
+            kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value,
+            value.error);
             if (value.error)
                 PANIC("OOPS: %d!\n", value.error);
 
             uint32_t future = READ_CSR(time) + (CLOCK_FREQ / 10);
             sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
-            // kprintf("[SHUTDOWN] Sleeping for 0.1s...\n");
+            kprintf("[SHUTDOWN] Sleeping for 0.1s...\n");
 
             WAIT_FOR_INTERRUPT();
         }
@@ -274,12 +280,6 @@ void secondary_main(uint32_t hartid) {
     kprintf("[SECONDARY] sbi_hart_stop() value=%d\terror=%d\n", value.value, value.error);
 }
 
-struct test {
-    uint32_t foo, bar;
-    bool baz;
-    char *bat;
-};
-
 void secondary_boot(void);
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     memset_s(__bss, (size_t)__bss_end - (size_t)__bss, 0, (size_t)__bss_end - (size_t)__bss);
@@ -293,9 +293,11 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
                          : "gp", "tp" // Clobbers
     );
 
+    init_streams();
+    heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
+
     WRITE_CSR(sstatus, READ_CSR(sstatus) | 0x02);
     WRITE_CSR(sie, READ_CSR(sie)|0x200);
-
 
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
@@ -304,17 +306,14 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
-    init_root_slabs();
-
 #ifdef TESTS
     slab_test_suite();
 #else
-    // inspect_device_tree(fdt);
-
-    // char *str = "Hello, World!\n";
-    // for (int i = 0; str[i] != '\0'; ++i) {
-    //     *(volatile char*)0x10000000 = str[i];
-    // }
+    device_tree_init(fdt);
+    plic_init();
+    uart_init();
+    if (kernel_verbose)
+        inspect_device_tree(fdt);
 
     // probe_virtio_device(0x10001000);
     // probe_virtio_device(0x10002000);
@@ -328,60 +327,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // probe_pci(0x30000000);
 
     // printf("SEI=0x%x\n", READ_CSR(SEI));
-
-#define PLIC_BASE 0x0c000000
-#define UART_IRQ 10
-    // Enable UART IRQs
-    *(uint32_t*)(PLIC_BASE + UART_IRQ*4) = 1;
-#define PLIC_SENABLE(hart) (PLIC_BASE + 0x2080 + (hart)*0x100)
-    // Enable this hart's S-mode enable bit for UART interrupts
-    *(uint32_t*)(PLIC_SENABLE(hartid)) = (1 << UART_IRQ);
-
-    // set this hart's priority threshold
-#define PLIC_SPRIORITY(hart) (PLIC_BASE + 0x201000 + (hart)*0x2000)
-    *(uint32_t*)PLIC_SPRIORITY(hartid) = 0;
-
-//     // READ_CSR(mstatus);
-
-#define UART_BASE 0x10000000
-#define Reg(reg) ((volatile uint8_t*)(UART_BASE + (reg)))
-#define ReadReg(reg) (*(Reg(reg)))
-#define WriteReg(reg, value) (*(Reg(reg)) = (value))
-#define IER 1
-    WriteReg(IER, 0x00);
-#define LCR 3
-#define LCR_BAUD_LATCH (1<<7)
-    WriteReg(LCR, LCR_BAUD_LATCH);
-
-    WriteReg(0, 0x03);
-    WriteReg(1, 0x00);
-#define LCR_EIGHT_BITS (3<<0)
-    WriteReg(LCR, LCR_EIGHT_BITS);
-#define FCR 2
-#define FCR_FIFO_ENABLE (1<<0)
-#define FCR_FIFO_CLEAR (3<<1)
-    WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
-
-#define IER_TX_ENABLE (1<<1)
-#define IEX_RX_ENABLE (1<<0)
-    WriteReg(IER, IER_TX_ENABLE | IEX_RX_ENABLE);
-
-//     // *(volatile uint8_t *)0x10000005 = 0x01;
-
-//     WAIT_FOR_INTERRUPT();
-
-// #define LSR 5
-// #define RHR 0
-//     if(ReadReg(LSR) & 0x01){
-//         // input data is ready.
-//         int c = ReadReg(RHR);
-//         printf("C=0x%x (%d)\n", c, c-'a');
-//     } else {
-//         printf("Nothin'\n");
-//     }
-
-    // uint8_t lsr = *(volatile uint8_t *)0x10000005;
-    // printf("LSR: 0x%x\n", lsr);
 
     // inspect_device_tree(fdt);
 
@@ -427,8 +372,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // kprintf("Starting process %d...\n\n", proc->pid);
     // yield();
 #endif
-
-    slab_dbg(&root_slab16);
 
     // Shutdown?
     kernel_shutdown(hartid);
@@ -495,24 +438,35 @@ void handle_syscall(struct trap_frame *f) {
 }
 
 void handle_trap(struct trap_frame *f) {
+    uint32_t user_pc = READ_CSR(sepc);
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
-    uint32_t user_pc = READ_CSR(sepc);
+    uint32_t sstatus = READ_CSR(sstatus);
 
+    // push_off();
+    // void (*restore_putc)(char) = kernel_io_config.putc;
+    // int (*restore_getc)() = kernel_io_config.getc;
+    // kernel_io_config.putc = &sbi_putc;
+    // kernel_io_config.getc = &sbi_getc;
+
+    // printf("entering trap handler scause=%lx, stval=%lx, sepc=%lx\n", scause, stval, user_pc);
     bool interrupt = scause & 0x80000000;
     if (interrupt) {
-        const char* cause = "unknown";
-        switch (scause & ~0x80000000) {
-        case 0: cause = "software interrupt"; break;
-        case 1: cause = "supervisor software interrupt"; break;
-        case 4: cause = "user timer interrupt"; break;
-        case 5: cause = "supervisor timer interrupt"; break;
-        default: break;
+        if (scause == 0x80000009) {
+            // printf("Entering plic interrupt...\n");
+            plic_interrupt();
+            // printf("Exited plic interrupt...\n");
+        } else {
+            const char* cause = "unknown";
+            switch (scause & ~0x80000000) {
+            case 1: cause = "supervisor software interrupt"; break;
+            case 5: cause = "supervisor timer interrupt"; break;
+            case 9: cause = "supervisor external interrupt"; break;
+            default: break;
+            }
+            PANIC("Unexpected interrupt! scause=%lx (%S) stval=%lx sepc=%lx\n", scause & ~0x80000000, cause, stval, user_pc);
         }
-        PANIC("Unexpected interrupt! scause=%lx (%S)\n", scause & ~0x80000000, cause);
-    }
-
-    if (scause == SCAUSE_ECALL) {
+    } else if (scause == SCAUSE_ECALL) {
         handle_syscall(f);
         user_pc += 4;
     } else {
@@ -527,10 +481,15 @@ void handle_trap(struct trap_frame *f) {
         case 7: cause = "store/AMO access fault"; break;
         default: break;
         }
-        PANIC("unexpected trap scause=%x (%s), stval=%x, sepc=%x\n", scause, cause, stval, user_pc);
+        PANIC("unexpected trap scause=%lx (%S), stval=%lx, sepc=%lx\n", scause, cause, stval, user_pc);
     }
 
+    // printf("Exiting trap handler (returning to 0x%p)...\n", user_pc);
+    // kernel_io_config.putc = restore_putc;
+    // kernel_io_config.getc = restore_getc;
     WRITE_CSR(sepc, user_pc);
+    WRITE_CSR(sstatus, sstatus);
+    // pop_off();
 }
 
 __attribute__((naked)) void secondary_boot(void) {
@@ -557,6 +516,7 @@ __attribute__((section(".text.boot"))) __attribute__((naked)) void boot(void) {
                          : "a6", "a7" // clobbers
     );
     __asm__ __volatile__("mv sp, %[stack_top]\n" // Set the stack pointer
+                        //  "csrw sscratch, sp\n"
                          "mv a0, a6\n"
                          "mv a1, a7\n"
                          "call kernel_main"             // Jump to kernel_main with restored a0 and a1

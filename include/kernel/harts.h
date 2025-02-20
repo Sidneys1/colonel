@@ -2,6 +2,7 @@
 
 #include <process.h>
 #include <stddef.h>
+#include <console.h>
 
 #define MAX_HARTS 32
 #define set_current_proc(procid)                                                                                       \
@@ -12,10 +13,11 @@
 
 typedef struct hart_local {
     uint32_t hartid;
+    int noff; // Depth of push_off nesting
+    int intena; // Were interrupts enabled before push_off?
+    struct stream *stdout;
     process *idle_proc;
     process *current_proc;
-    char buffer[1024];
-    uint16_t buffer_idx;
 } hart_local;
 
 extern hart_local heart_locals[MAX_HARTS];

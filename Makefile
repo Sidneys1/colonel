@@ -2,7 +2,7 @@
 BUILD_DIR:=./build
 
 # Number of cores for QEMU
-CORES:=2
+CORES?=2
 # QEMU executable
 QEMU:=qemu-system-riscv32
 # objcopy executable
@@ -13,11 +13,11 @@ GDB:=gdb-multiarch
 # C compiler. We tack on `bear` to get `compile_commands.json`
 CC:=bear --append --output compile_commands.json -- clang
 # "extra" CFLAGS. By default, we build in DEBUG mode.
-CFLAGSEXTRA?=-DDEBUG -O0 -ggdb
+CFLAGSEXTRA?=-DDEBUG -O0 -ggdb -fno-omit-frame-pointer
 # Linker flags
 LDFLAGS?=-flto -Wl,--undefined=main -Wl,--undefined=exit -Wl,--undefined=kernel_main
 # Cflags. Appends CFLAGSEXTRA.
-CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32gc -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
+CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
 KCFLAGS:=-isystem ./include/kernel/
 # Extra user-mode flags.
@@ -73,7 +73,7 @@ run-quiet: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
 		-kernel ${BUILD_DIR}/kernel.elf
 
 debug: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
-	${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
+	${QEMU} -machine virt -smp ${CORES} -bios default -nographic --no-reboot \
 		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
 		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
 		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
@@ -81,9 +81,25 @@ debug: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
 	& ${GDB} -tui -q -ex "file ${BUILD_DIR}/kernel.elf" \
 		-ex "target remote 127.0.0.1:1234" \
 		-ex "b boot" \
-		-ex "b kernel_main" \
-		-ex "b secondary_boot" \
 		-ex "c"
+
+debug-tmux: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
+	@if [ -z "$$TMUX" ]; then echo "Not running under tmux!" 1>&2 && exit 1; fi
+	pane1=$$(tmux split-window -hPF "#{pane_id}" -l '30%' -d 'tail -f /dev/null') \
+	&& tty1=$$(tmux display-message -p -t "$$pane1" '#{pane_tty}') \
+	&& pane2=$$(tmux split-window -P -F "#{pane_id}" -l '25%' -d '${QEMU} -machine virt -smp ${CORES} -bios default -nographic -serial mon:stdio --no-reboot \
+		-d unimp,guest_errors,int,cpu_reset -D qemu.log \
+		-drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
+		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+		-kernel ${BUILD_DIR}/kernel.elf -s -S & tail -F qemu.out') \
+	&& tty2=$$(tmux display-message -p -t "$$pane2" '#{pane_tty}') \
+	&& ${GDB} -tui -q -ex "file ${BUILD_DIR}/kernel.elf" \
+		-ex "target remote 127.0.0.1:1234" \
+		-ex "layout split" \
+		-ex "dashboard -output $$tty1" \
+		-ex "b kernel_main" \
+		-ex "run > $$tty2" \
+	; echo "Killing panes..." && tmux kill-pane -t $$pane2 & tmux kill-pane -t $$pane1
 
 test:
 	${MAKE} CFLAGSEXTRA="${CFLAGSEXTRA} -DTESTS" run
