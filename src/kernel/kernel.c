@@ -344,6 +344,148 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
         putchar('\n');
     }
 
+    paddr_t fw_cfg_base = 0x10100000;
+    *((volatile uint16_t*)(fw_cfg_base + 8)) = 0x0000;
+    uint32_t read1 = *((volatile uint32_t*)fw_cfg_base);
+    // uint32_t read2 = *((uint32_t*)(fw_cfg_base));
+    struct {
+        union {
+            uint32_t i;
+            char c[5];
+        };
+    } value;
+    value.i = read1;
+    value.c[4] = '\0';
+    printf("[fw_cfg] Magic: %#08lx (%S)\n", value.i, value.c);
+
+    *((volatile uint16_t*)(fw_cfg_base + 8)) = 0x0100;
+    read1 = *((volatile uint32_t*)fw_cfg_base);
+    printf("[fw_cfg] Revision/feature bitmap: %#08lx\n", read1);
+
+    printf("[fw_cfg] Files:\n");
+    *((volatile uint16_t*)(fw_cfg_base + 8)) = 0x1900;
+    uint32_t count = be_to_le(*((volatile uint32_t*)fw_cfg_base));
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t size = be_to_le(*((volatile uint32_t*)fw_cfg_base));
+        uint16_t select = *((volatile uint16_t*)fw_cfg_base);
+        select = (select >> 8) | ((select & 0xff) << 8);
+        uint16_t reserved = *((volatile uint16_t*)fw_cfg_base);
+        char name[56];
+        for (int x = 0; x < 14; x++) {
+            uint32_t v = *((volatile uint32_t*)fw_cfg_base);
+            *((uint32_t*)name + x) = v;
+        }
+        printf("\tFile #%lu: %S %ld bytes (selector: %d)\n", i, name, size, select);
+    }
+
+    struct dma {
+        volatile uint32_t control;
+        uint32_t length;
+        uint64_t address;
+    } dma;
+    paddr_t page = alloc_pages(1);
+    dma.control = be_to_le((34 << 16)|2|8);
+    dma.length = be_to_le(36);
+    uint64_t address = be_to_le((uint32_t)page);
+    address <<= 32;
+    dma.address = address;
+    // printf("0x%p\n", page);
+    printf("DMA: control=%#lx\tlength=%#lx\taddress=%#016llx\n", dma.control, dma.length, address, dma.address);
+    *((volatile uint32_t*)(fw_cfg_base + 20)) = be_to_le((uint32_t)&dma);
+    printf("Control: %#lx\n", dma.control);
+
+    // printf("RSDP: `%s`\n", (const_string){.head = (char*)page, .tail = ((char*)page + 8)});
+    // printf("OEM ID: `%s`\n", (const_string){.head = (char*)page + 9, .tail = ((char*)page + 6 + 9)});
+    // printf("Revision: %hhu\n", *((uint8_t*)page + 15));
+    // uint32_t addr = *(uint32_t*)(page + 16);
+    // printf("RSDT Addr: 0x%08lx\n", addr);
+    // printf("Length: %lu\n", *((uint32_t*)(page + 20)));
+    // address = *(uint32_t*)(page + 24);
+    // printf("XSDT Addr: 0x%08lx%08lx\n", (uint32_t)(address >> 32), (uint32_t)address);
+    // printf("\n\n");
+
+    // dma.control = be_to_le((35 << 16)|2|8);
+    // dma.length = be_to_le(PAGE_SIZE);
+    // address = be_to_le((uint32_t)page);
+    // address <<= 32;
+    // dma.address = address;
+    // // printf("0x%p\n", page);
+    // printf("DMA: control=0x%lx\tlength=0x%lx\taddress=0x%08lx%08lx\n", dma.control, dma.length, (uint32_t)(address >> 32), (uint32_t)address, dma.address);
+    // *((volatile uint32_t*)(fw_cfg_base + 20)) = be_to_le((uint32_t)&dma);
+    // printf("Control: 0x%lx\n", dma.control);
+
+    // struct rsdt {
+    //     char Signature[4];
+    //     uint32_t Length;
+    //     uint8_t Revision;
+    //     uint8_t Checksum;
+    //     char OEMID[6];
+    //     char OEMTableId[8];
+    //     uint32_t OEMRevision;
+    //     uint32_t CreatorID;
+    //     uint32_t CreatorRevision;
+    // } __attribute__((packed)) *rsdt = (struct rsdt*)page;
+    // printf("RSDT Signature: `%s`\n", CSTR(rsdt->Signature));
+    // printf("\tLength: %lu\n", rsdt->Length);
+    // printf("\tRevision: %hhu\n", rsdt->Revision);
+    // printf("\tChecksum: %hhu\n", rsdt->Checksum);
+    // printf("\tOEM ID: `%s`\n", CSTR(rsdt->OEMID));
+    // printf("\tOEM Table ID: `%s`\n", CSTR(rsdt->OEMTableId));
+    // printf("\tOEM Revision: %lu\n", rsdt->Revision);
+    // printf("\tCreator ID: %lu\n", rsdt->CreatorID);
+    // printf("\tCreator Revision: %lu\n", rsdt->CreatorRevision);
+
+
+    // dma.control = be_to_le(4);
+    // dma.length = be_to_le(493);
+    // // address = be_to_le((uint32_t)page);
+    // // address <<= 32;
+    // // dma.address = address;
+    // // printf("0x%p\n", page);
+    // // printf("DMA: control=0x%lx\tlength=0x%lx\taddress=0x%08lx%08lx\n", dma.control, dma.length, (uint32_t)(address >> 32), (uint32_t)address, dma.address);
+    // *((volatile uint32_t*)(fw_cfg_base + 20)) = be_to_le((uint32_t)&dma);
+    // printf("Control: 0x%lx\n", dma.control);
+
+    // dma.control = be_to_le(2);
+    // dma.length = be_to_le(PAGE_SIZE);
+    // address = be_to_le((uint32_t)page);
+    // address <<= 32;
+    // dma.address = address;
+    // // printf("0x%p\n", page);
+    // printf("DMA: control=0x%lx\tlength=0x%lx\taddress=0x%08lx%08lx\n", dma.control, dma.length, (uint32_t)(address >> 32), (uint32_t)address, dma.address);
+    // *((volatile uint32_t*)(fw_cfg_base + 20)) = be_to_le((uint32_t)&dma);
+    // printf("Control: 0x%lx\n", dma.control);
+
+    // struct xsdt {
+    //     struct rsdt rsdt;
+    // } __attribute__((packed)) *xsdt = (struct xsdt*)page;
+    // printf("XSDT Signature: `%s`\n", CSTR(xsdt->rsdt.Signature));
+    // printf("\tLength: %lu\n", xsdt->rsdt.Length);
+    // printf("\tRevision: %hhu\n", xsdt->rsdt.Revision);
+    // printf("\tChecksum: %hhu\n", xsdt->rsdt.Checksum);
+    // printf("\tOEM ID: `%s`\n", CSTR(xsdt->rsdt.OEMID));
+    // printf("\tOEM Table ID: `%s`\n", CSTR(xsdt->rsdt.OEMTableId));
+    // printf("\tOEM Revision: %lu\n", xsdt->rsdt.Revision);
+    // printf("\tCreator ID: %lu\n", xsdt->rsdt.CreatorID);
+    // printf("\tCreator Revision: %lu\n", xsdt->rsdt.CreatorRevision);
+    // int entries = (xsdt->rsdt.Length - sizeof(rsdt) / 8);
+    // printf("\tEntries: %d\n", entries);
+
+
+
+
+    // printf("Read: 0x%08lx\n", be_to_le(read1));
+    // uint64_t read2 = *((volatile uint64_t*)(fw_cfg_base + 16));
+    // struct {
+    //     union {
+    //         uint64_t i;
+    //         char c[9];
+    //     };
+    // } value2;
+    // value2.i = read2;
+    // value2.c[8] = '\0';
+    // printf("Read: %S\n", value2.c);
+
     for (long hid = 0; hid < MAX_HARTS; hid++) {
         enum SBI_HSM_STATE status = hart_get_status(hid);
         if (status == SBI_HSM_STATE_ERROR) {
