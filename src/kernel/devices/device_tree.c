@@ -138,12 +138,12 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             } else if (IS("phandle") || IS("interrupt-parent") || IS("cpu")) {
                 /* <phandle> */
                 printf("<phandle> "ANSI_MAGENTA"0x%x"ANSI_RESET"", be_to_le(*(uint32_t *)(prop + 1)));
-            } else if (IS("compatible")) {
+            } else if (IS("compatible") || IS("riscv,isa-extensions")) {
                 /* STRINGLIST */
                 printf("<stringlist> ");
                 print_property_stringlist((char *)(prop + 1), be_to_le(prop->len), true);
             } else if (IS("model") || IS("bootargs") || IS("stdout-path") || IS("device_type") || IS("status") ||
-                       IS("mmu-type") || IS("riscv,isa")) {
+                       IS("mmu-type") || IS("riscv,isa") || IS("riscv,isa-base")) {
                 /* STRING */
                 const char *string = (char *)(prop + 1);
                 printf("<string> `"ANSI_GREEN"%S"ANSI_RESET"`", string);
@@ -151,8 +151,8 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
                        IS("bus-range") || IS("interrupts-extended")) {
                 printf(ANSI_MAGENTA"<Unknown custom property type!>"ANSI_RESET"");
             } else {
-                PANIC(ANSI_MAGENTA"<Unhandled property type!>"ANSI_RESET"");
-                cont = false;
+                printf(ANSI_MAGENTA"<Unhandled property type: `%S`!>"ANSI_RESET"", name);
+                // cont = false;
             }
 #undef IS
             printf("\n");
@@ -218,7 +218,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
 
     token += 1 + (len + sizeof(token)) / sizeof(token);
 
-    bool could_be_uart = node_name[0] == 'u' && node_name[1] == 'a' && node_name[2] == 'r' && node_name[3] == 't' && node_name[4] == '@';
+    bool could_be_uart = node_name[0] == 's' && node_name[1] == 'e' && node_name[2] == 'r' && node_name[3] == 'i' && node_name[4] == 'a' && node_name[5] == 'l' && node_name[6] == '@';
     bool could_be_plic = node_name[0] == 'p' && node_name[1] == 'l' && node_name[2] == 'i' && node_name[3] == 'c' && node_name[4] == '@';
 
     do {
@@ -297,9 +297,9 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *root, enum FDT_TOKEN *token, cons
     } while (cont);
 
     if (could_be_uart) {
-        const_string n = {.head = node_name + 5, .tail = node_name + len};
+        const_string n = {.head = node_name + 7, .tail = node_name + len};
         if (uart_base != 0) {
-            kprintf("Found additional UART device at 0x%s.\n", n);
+            kprintf("Found additional serial device at 0x%s.\n", n);
         } else {
             uart_base = strtoul(n, 16);
         }
@@ -332,10 +332,10 @@ void device_tree_init(const fdt_header *fdt) {
 void inspect_device_tree(const fdt_header *fdt) {
     if (fdt->magic != 0xedfe0dd0)
         PANIC("Could not find FDT magic at 0x%p!\n", fdt);
-
     const char *strings = (char *)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
     enum FDT_TOKEN *token = (enum FDT_TOKEN *)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
 
+    // printf("idt\n");
     struct hart_local *hart = get_hart_local();
     hart->stdout->auto_flush = false;
     kprintf("Found FDT magic at 0x%x (%x), version %d\n", fdt, be_to_le(fdt->magic), be_to_le(fdt->version));
@@ -359,4 +359,5 @@ void inspect_device_tree(const fdt_header *fdt) {
     print_node(NULL, token, strings, 0, 2, 1);
     hart->stdout->auto_flush = true;
     putchar('\n');
+    flush();
 }

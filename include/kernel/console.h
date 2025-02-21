@@ -8,18 +8,17 @@ extern struct io_config_t {
     int (*volatile getc)(void);
 } kernel_io_config;
 
-enum StreamDirection {
+enum StreamDirection : uint8_t {
     STREAM_OUT,
     STREAM_IN
 };
 
 struct stream {
-    enum StreamDirection direction;
-    // uint16_t no;
-    bool auto_flush;
     struct stream *target;
-    uint16_t buffer_r, buffer_w;
     char *buffer;
+    uint16_t buffer_r, buffer_w;
+    enum StreamDirection direction;
+    bool auto_flush;
 };
 
 extern struct stream stdout;

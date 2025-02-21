@@ -88,16 +88,16 @@ void flush(void) {
 }
 
 // _Atomic uint16_t streamno = 0;
-static struct slab_16 streams;
+// static struct slab_16 streams;
 
 void init_streams(void) {
-    create_slab(&streams);
+    // create_slab(&streams);
 
     stdout.buffer = (char*)alloc_pages(1);
 }
 
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush) {
-    struct stream *stream = (struct stream*)slab_alloc(&streams);
+    struct stream *stream = (struct stream*)slab_alloc(&root_slab16);
     // TODO: validate target (exists, direction, etc);
     stream->target = target;
     // stream->no = ++streamno;

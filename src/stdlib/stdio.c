@@ -778,20 +778,21 @@ int _vsnprintf(out_fct_type out, char *restrict buffer, const size_t maxlen, con
         }
 
         case 'p': {
-            width = sizeof(void *) * 2U;
-            flags |= FLAGS_ZEROPAD | FLAGS_UPPERCASE;
-#ifdef PRINTF_SUPPORT_LONG_LONG
-            const bool is_ll = sizeof(uintptr_t) == sizeof(long long);
-            if (is_ll) {
-                idx = _ntoa_long_long(out, buffer, idx, maxlen, (uintptr_t)va_arg(va, void *), false, 16U, precision,
-                                      width, flags);
-            } else {
-#endif
+            // width = sizeof(void *) * 2U;
+            width = 10U;
+            flags |= FLAGS_ZEROPAD | FLAGS_HASH;
+// #ifdef PRINTF_SUPPORT_LONG_LONG
+//             const bool is_ll = sizeof(uintptr_t) == sizeof(long long);
+//             if (is_ll) {
+//                 idx = _ntoa_long_long(out, buffer, idx, maxlen, (uintptr_t)va_arg(va, void *), false, 16U, precision,
+//                                       width, flags);
+//             } else {
+// #endif
                 idx = _ntoa_long(out, buffer, idx, maxlen, (unsigned long)((uintptr_t)va_arg(va, void *)), false, 16U,
                                  precision, width, flags);
-#ifdef PRINTF_SUPPORT_LONG_LONG
-            }
-#endif
+// #ifdef PRINTF_SUPPORT_LONG_LONG
+//             }
+// #endif
             format++;
             break;
         }

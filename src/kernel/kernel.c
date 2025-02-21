@@ -293,6 +293,7 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
                          : "gp", "tp" // Clobbers
     );
 
+    init_root_slabs();
     init_streams();
     heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
 
@@ -372,6 +373,12 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     // kprintf("Starting process %d...\n\n", proc->pid);
     // yield();
 #endif
+    if (kernel_verbose) {
+        slab_dbg(&root_slab4);
+        slab_dbg(&root_slab8);
+        slab_dbg(&root_slab16);
+        slab_dbg(&root_slab32);
+    }
 
     // Shutdown?
     kernel_shutdown(hartid);
