@@ -16,8 +16,8 @@ CC:=bear --append --output compile_commands.json -- clang
 CFLAGSEXTRA?=-DDEBUG -O0 -ggdb -fno-omit-frame-pointer
 # Linker flags
 LDFLAGS?=-flto -Wl,--undefined=main -Wl,--undefined=exit -Wl,--undefined=kernel_main
-# Cflags. Appends CFLAGSEXTRA.
-CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
+# Cflags. Appends CFLAGSEXTRA.  -mabi=ilp32f
+CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
 KCFLAGS:=-isystem ./include/kernel/
 # Extra user-mode flags.

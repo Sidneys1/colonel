@@ -11,11 +11,16 @@ paddr_t plic_base = 0;
 #define PLIC_SPRIORITY(hart) (plic_base + 0x201000 + (hart)*0x2000)
 #define PLIC_SCLAIM(hart) (plic_base + 0x201004 + (hart)*0x2000)
 
-void plic_init(void) {
-    if (plic_base == 0) {
+void plic_init(paddr_t base) {
+    if (base == 0) {
         kprintf(ANSI_RED "Could not find PLIC to initialize.\n");
         return;
     }
+    if (plic_base != 0) {
+        kprintf(ANSI_RED "Cannot initialize PLIC device at %#p, already initialized serial at %#p.\n", base, plic_base);
+        return;
+    }
+    plic_base = base;
     *(uint32_t*)PLIC_SPRIORITY(get_hart_local()->hartid) = 0;
     kprintf("Initialized PLIC at 0x%p.\n", plic_base);
 }

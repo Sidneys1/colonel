@@ -300,6 +300,10 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     WRITE_CSR(sstatus, READ_CSR(sstatus) | 0x02);
     WRITE_CSR(sie, READ_CSR(sie)|0x200);
 
+#ifdef TESTS
+    slab_test_suite();
+#else
+    device_tree_init(fdt);
     printf("\n\n");
     printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
     printf("/\\  ___\\   /\\  __ \\   /\\ \\       /\\  __ \\   /\\ \"-.\\ \\   /\\  ___\\   /\\ \\      \n");
@@ -307,12 +311,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
-#ifdef TESTS
-    slab_test_suite();
-#else
-    device_tree_init(fdt);
-    plic_init();
-    uart_init();
     if (kernel_verbose)
         inspect_device_tree(fdt);
 

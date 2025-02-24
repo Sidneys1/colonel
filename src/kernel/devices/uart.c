@@ -59,11 +59,16 @@ enum : uint16_t {
     BPS_115200 = 0x0001
 };
 
-void uart_init() {
-    if (uart_base == 0) {
+void uart_init(paddr_t base) {
+    if (base == 0) {
         kprintf(ANSI_RED "Could not find UART to initialize.\n");
         return;
     }
+    if (uart_base != 0) {
+        kprintf(ANSI_RED "Cannot initialize serial device at %#p, already initialized serial at %#p.\n", base, uart_base);
+        return;
+    }
+    uart_base = base;
     WRITE_REG(IER, 0x00);
 
     plic_enable(UART_IRQ);
