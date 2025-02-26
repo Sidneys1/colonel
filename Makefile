@@ -14,7 +14,7 @@ QFLAGS:=-machine virt -bios default --no-reboot \
         -m ${MEM} -smp ${CORES} -serial mon:stdio \
         -drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
         -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
-        -device VGA \
+        -device VGA,romfile=/usr/share/vgabios/vgabios-stdvga.bin \
         -kernel ${BUILD_DIR}/kernel.elf
 
 # objcopy executable
@@ -27,7 +27,7 @@ CC:=bear --append --output compile_commands.json -- clang
 # "extra" CFLAGS. By default, we build in DEBUG mode.
 CFLAGSEXTRA?=-DDEBUG -O0 -ggdb
 # Cflags. Appends CFLAGSEXTRA.
-CFLAGS=-std=c23 -Wall -Wextra --target=riscv32 -march=rv32gc -mabi=ilp32f -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
+CFLAGS=-std=c23 -Wall -Wextra --target=riscv32 -march=rv32gc -mabi=ilp32d -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
 KCFLAGS:=-isystem ./include/kernel/
 # Extra user-mode flags.

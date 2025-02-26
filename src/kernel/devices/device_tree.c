@@ -162,8 +162,8 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, enum FDT_TOKEN *token, const c
             } else if (IS("interrupts")|| IS("interrupt-map-mask") || IS("interrupt-map") || IS("bus-range")|| IS("interrupts-extended")) {
                 printf("\033[33m<Unknown custom property type!>\033[0m");
             } else {
-                PANIC("\033[33m<Unhandled property type!>\033[0m");
-                cont = false;
+                printf("\033[33m<Unhandled property type!>\033[0m");
+                // cont = false;
             }
 #undef IS
             printf("\n");

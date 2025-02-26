@@ -2,6 +2,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+extern uint32_t CLOCK_FREQ;
+
 #define WAIT_FOR_INTERRUPT() __asm__ ( \
     "wfi" \
     : \
