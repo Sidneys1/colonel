@@ -18,7 +18,7 @@ struct slab_16 root_slab16;
 struct slab_32 root_slab32;
 
 void init_root_slabs(void) {
-    kprintf("Initializing root slab allocators...\n");
+    // kprintf("Initializing root slab allocators...\n");
     create_slab(&root_slab4);
     create_slab(&root_slab8);
     create_slab(&root_slab16);
@@ -27,18 +27,19 @@ void init_root_slabs(void) {
 
 #define SLAB(SIZE, PAGES_PER_SLAB)                                                                                     \
     void create_slab_##SIZE(struct slab_##SIZE *slab) {                                                                \
-        size_t capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;                           \
+        /* size_t capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;                           \
         paddr_t page = alloc_pages(1);                                                                                 \
         struct cache_##SIZE *cache = (struct cache_##SIZE *)page;                                                      \
         SLAB_DBG("Capacity of cache at 0x%p is %d objects of %d bytes each (PAGE size minus %d-byte header).\n",       \
-                 cache, capacity, SIZE, sizeof(struct cache_##SIZE));                                                  \
+                 cache, capacity, SIZE, sizeof(struct cache_##SIZE)); */                                                  \
         slab->first_full = NULL;                                                                                       \
-        slab->first_empty = cache;                                                                                     \
+        slab->first_empty = NULL;                                                                                     \
+        slab->first_partial = NULL;\
         /* cache->slab = slab;*/                                                                                       \
-        cache->first_free = cache->entries;                                                                            \
+        /* cache->first_free = cache->entries;                                                                            \
         for (size_t i = 1; i < capacity; i++)                                                                          \
             cache->entries[i - 1].next = &cache->entries[i];                                                           \
-        cache->entries[capacity - 1].next = NULL;                                                                      \
+        cache->entries[capacity - 1].next = NULL; */                                                                      \
     }                                                                                                                  \
                                                                                                                        \
     void *slab_alloc_##SIZE(struct slab_##SIZE *slab) {                                                                \
@@ -53,7 +54,7 @@ void init_root_slabs(void) {
             } else {                                                                                                   \
                 SLAB_DBG("OUT OF CACHES, allocating a new page...\n");                                                 \
                 size_t capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;                   \
-                cache = (struct cache_##SIZE *)alloc_pages(1);                                                         \
+                cache = (struct cache_##SIZE *)alloc_pages(PAGES_PER_SLAB);                                                         \
                 SLAB_DBG(                                                                                              \
                     "Capacity of cache at 0x%p is %d objects of %d bytes each (PAGE size minus %d-byte header).\n",    \
                     cache, capacity, SIZE, sizeof(struct cache_##SIZE));                                               \
@@ -152,7 +153,7 @@ void init_root_slabs(void) {
     }                                                                                                                  \
                                                                                                                        \
     void slab_dbg_##SIZE(struct slab_##SIZE *slab) {                                                                   \
-        kprintf("Debug of slab_" #SIZE " at 0x%p:\n", slab);                                                           \
+        kprintf("Debug of slab_" #SIZE " at %p:", slab);                                                           \
         size_t count = 0, free = 0, capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;      \
         for (struct cache_##SIZE *c = slab->first_empty; c != NULL; c = c->next_cache) {                               \
             count++;                                                                                                   \
@@ -167,11 +168,14 @@ void init_root_slabs(void) {
                                                                                                                        \
         for (struct cache_##SIZE *c = slab->first_full; c != NULL; c = c->next_cache)                                  \
             count++;                                                                                                   \
-                                                                                                                       \
-        kprintf(" - Capacity: %d entries per cache, %d caches total, %d total capacity,\n"                             \
-                "                            of which %d entries are unallocated (%d.%d%% free).\n",                   \
-                capacity, count, capacity * count, free, (free * 100) / (capacity * count),                            \
-                ((free * 1000) / (capacity * count)) % 10);                                                            \
+            \
+        if (count == 0) {\
+            printf(ANSI_GREY " (no slabs allocated)." ANSI_RESET "\n");                                                                                                               \
+            return;\
+        }\
+        putchar('\n');\
+        kprintf(" - Capacity: %d*%d=%d, %d free (%d.%d%%).\n",                   \
+                capacity, count, capacity * count, free, (free * 100) / (capacity * count), ((free * 1000) / (capacity * count)) % 10);                                                            \
         if (slab->first_empty == NULL)                                                                                 \
             kprintf(" - No empty caches.\n");                                                                          \
         else {                                                                                                         \

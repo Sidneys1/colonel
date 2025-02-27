@@ -11,7 +11,7 @@ struct pci_driver drivers[] = {
     {BOCHS_VENDOR_ID, BOCHS_DEVICE_ID, &init_bochs},
 };
 
-struct pci_ll *pci_ll_head = NULL, *pci_ll_tail = NULL, *bridges[256] = {};
+struct pci_ll *pci_ll_head = NULL, *bridges[256] = {};
 
 void print_pci_bar(struct pci_type0_header *type0, char num) {
     struct bar *bar = &type0->bars[num];
@@ -96,9 +96,10 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
 
     if (device_header->class_code == 0x06) {
         struct pci_ll *bridge = (struct pci_ll *)slab_alloc(&root_slab16);
+        bridge->first_child = NULL;
         bridge->next = NULL;
         // bridge->prev = pci_ll_tail;
-        pci_ll_tail = bridge;
+        // pci_ll_tail = bridge;
         if (pci_ll_head == NULL)
             pci_ll_head = bridge;
         bridge->device.pci = device_header;
@@ -109,13 +110,11 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
         struct pci_ll *device = (struct pci_ll *)slab_alloc(&root_slab16);
         device->next = NULL;
         struct pci_ll *bridge = bridges[bus];
-        struct pci_ll *tail = bridge->first_child;
         if (bridge->first_child == NULL)
             bridge->first_child = device;
         else {
-            for (;; tail = tail->next)
-                if (tail->next == NULL)
-                    break;
+            struct pci_ll *tail = bridge->first_child;
+            for (; tail->next != NULL; tail = tail->next);
             tail->next = device;
         }
         device->device.pci = device_header;
@@ -134,7 +133,7 @@ void probe_pci(paddr_t base) {
                     break;
 
     for (size_t i = 0; i < 256 && bridges[i] != NULL; i++) {
-        char *bridge_type, *vendor_id, *device_id;
+        char *bridge_type = "BAD", *vendor_id = "BAD", *device_id = "BAD";
         switch (bridges[i]->device.pci->subclass) {
         case 0x00:
             bridge_type = "Host";
@@ -159,7 +158,7 @@ void probe_pci(paddr_t base) {
             device_id = "unkown-device";
             break;
         }
-        kprintf("[Bus %d] [%x:%x] %s Bridge (%s %s).\n", i, bridges[i]->device.pci->vendor_id,
+        kprintf("[Bus %d] [%04x:%04x] %S Bridge (%S %S).\n", i, bridges[i]->device.pci->vendor_id,
                 bridges[i]->device.pci->device_id, bridge_type, vendor_id, device_id);
         bridges[i]->device.pci->command = bridges[i]->device.pci->command | 0x06;
         for (struct pci_ll *child = bridges[i]->first_child; child != NULL; child = child->next) {
@@ -242,7 +241,7 @@ void probe_pci(paddr_t base) {
                 device_id = "unkown-device";
                 break;
             }
-            kprintf("   | [%04hx:%04hx] %s (%s %s)\n", child->device.pci->vendor_id, child->device.pci->device_id,
+            kprintf("   | [%04hx:%04hx] %S (%S %S)\n", child->device.pci->vendor_id, child->device.pci->device_id,
                     bridge_type, vendor_id, device_id);
         }
     }

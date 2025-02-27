@@ -3,8 +3,8 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-int getchar(void);
-void putchar(char ch);
+extern inline int getchar(void);
+extern inline void putchar(char ch);
 
 extern inline int printf(const char *restrict format, ...);
 extern inline int sprintf(char *restrict s, const char *restrict format, ...);

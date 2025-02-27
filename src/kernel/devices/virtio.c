@@ -1,8 +1,9 @@
 #include "stddef.h"
 #include <kernel.h>
 #include <devices/virtio.h>
-#include <stdio.h>
 #include <memory/page_allocator.h>
+#include <stdio.h>
+#include <string.h>
 
 struct virtio_virtq *blk_request_vq;
 struct virtio_blk_req *blk_req;
@@ -11,16 +12,12 @@ unsigned blk_capacity;
 struct file files[FILES_MAX];
 uint8_t disk[DISK_MAX_SIZE];
 
-uint32_t virtio_reg_read32(unsigned offset) {
-    return *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset));
-}
+uint32_t virtio_reg_read32(unsigned offset) { return *((volatile uint32_t *)(VIRTIO_BLK_PADDR + offset)); }
 
-uint64_t virtio_reg_read64(unsigned offset) {
-    return *((volatile uint64_t *) (VIRTIO_BLK_PADDR + offset));
-}
+uint64_t virtio_reg_read64(unsigned offset) { return *((volatile uint64_t *)(VIRTIO_BLK_PADDR + offset)); }
 
 void virtio_reg_write32(unsigned offset, uint32_t value) {
-    *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset)) = value;
+    *((volatile uint32_t *)(VIRTIO_BLK_PADDR + offset)) = value;
 }
 
 void virtio_reg_fetch_and_or32(unsigned offset, uint32_t value) {
@@ -66,9 +63,9 @@ void probe_virtio_device(paddr_t location) {
 struct virtio_virtq *virtq_init(unsigned index) {
     // Allocate a region for the virtqueue.
     paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
-    struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
+    struct virtio_virtq *vq = (struct virtio_virtq *)virtq_paddr;
     vq->queue_index = index;
-    vq->used_index = (volatile uint16_t *) &vq->used.index;
+    vq->used_index = (volatile uint16_t *)&vq->used.index;
     // 1. Select the queue writing its index (first queue is 0) to QueueSel.
     virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
     // 5. Notify the device about the queue size by writing the size to QueueNum.
@@ -107,7 +104,7 @@ void virtio_blk_init(void) {
 
     // Allocate a region to store requests to the device.
     blk_req_paddr = alloc_pages(align_up(sizeof(*blk_req), PAGE_SIZE) / PAGE_SIZE);
-    blk_req = (struct virtio_blk_req *) blk_req_paddr;
+    blk_req = (struct virtio_blk_req *)blk_req_paddr;
 }
 
 // Notifies the device that there is a new request. `desc_index` is the index
@@ -121,15 +118,12 @@ void virtq_kick(struct virtio_virtq *vq, int desc_index) {
 }
 
 // Returns whether there are requests being processed by the device.
-bool virtq_is_busy(struct virtio_virtq *vq) {
-    return vq->last_used_index != *vq->used_index;
-}
+bool virtq_is_busy(struct virtio_virtq *vq) { return vq->last_used_index != *vq->used_index; }
 
 // Reads/writes from/to virtio-blk device.
 void read_write_disk(void *buf, unsigned sector, int is_write) {
     if (sector >= blk_capacity / SECTOR_SIZE) {
-        kprintf("virtio: tried to read/write sector=%d, but capacity is %d\n",
-              sector, blk_capacity / SECTOR_SIZE);
+        kprintf("virtio: tried to read/write sector=%d, but capacity is %d\n", sector, blk_capacity / SECTOR_SIZE);
         return;
     }
 
@@ -137,7 +131,7 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
     blk_req->sector = sector;
     blk_req->type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
     if (is_write)
-        memcpy(blk_req->data, buf, SECTOR_SIZE);
+        memcpy_s(blk_req->data, sizeof blk_req->data, buf, SECTOR_SIZE);
 
     // Construct the virtqueue descriptors (using 3 descriptors).
     struct virtio_virtq *vq = blk_request_vq;
@@ -164,14 +158,13 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
 
     // virtio-blk: If a non-zero value is returned, it's an error.
     if (blk_req->status != 0) {
-        kprintf("virtio: warn: failed to read/write sector=%d status=%d\n",
-               sector, blk_req->status);
+        kprintf("virtio: warn: failed to read/write sector=%d status=%d\n", sector, blk_req->status);
         return;
     }
 
     // For read operations, copy the data into the buffer.
     if (!is_write)
-        memcpy(buf, blk_req->data, SECTOR_SIZE);
+        memcpy_s(buf, SECTOR_SIZE, blk_req->data, SECTOR_SIZE);
 }
 
 int oct2int(char *oct, int len) {
@@ -191,20 +184,23 @@ void fs_init(void) {
 
     unsigned off = 0;
     for (int i = 0; i < FILES_MAX; i++) {
-        struct tar_header *header = (struct tar_header *) &disk[off];
+        struct tar_header *header = (struct tar_header *)&disk[off];
         if (header->name[0] == '\0')
             break;
 
-        if (strcmp(header->magic, "ustar") != 0)
-            PANIC("invalid tar header: magic=\"%s\"", header->magic);
+        if (strncmp(header->magic, "ustar", 6) != 0)
+            PANIC("invalid tar header: magic=\"%S\"", header->magic);
 
         int filesz = oct2int(header->size, sizeof(header->size));
         struct file *file = &files[i];
         file->in_use = true;
-        strcpy(file->name, header->name);
-        memcpy(file->data, header->data, filesz);
+        strncpy_s(file->name, sizeof file->name, header->name, sizeof header->name);
+        if ((unsigned int)filesz > sizeof file->data)
+            PANIC("Cannot load file `%S`, because it is larger than the available buffer (%d vs %d)!\n", file->name,
+                  filesz, sizeof file->data);
+        memcpy_s(file->data, sizeof file->data, header->data, filesz);
         file->size = filesz;
-        kprintf("file: %s, size=%d\n", file->name, file->size);
+        kprintf("file: %S, size=%d\n", file->name, file->size);
 
         off += align_up(sizeof(struct tar_header) + filesz, SECTOR_SIZE);
     }
@@ -212,19 +208,19 @@ void fs_init(void) {
 
 void fs_flush(void) {
     // Copy all file contents into `disk` buffer.
-    memset(disk, 0, sizeof(disk));
+    memset_s(disk, sizeof disk, 0, sizeof disk);
     unsigned off = 0;
     for (int file_i = 0; file_i < FILES_MAX; file_i++) {
         struct file *file = &files[file_i];
         if (!file->in_use)
             continue;
 
-        struct tar_header *header = (struct tar_header *) &disk[off];
-        memset(header, 0, sizeof(*header));
-        strcpy(header->name, file->name);
-        strcpy(header->mode, "000644");
-        strcpy(header->magic, "ustar");
-        strcpy(header->version, "00");
+        struct tar_header *header = (struct tar_header *)&disk[off];
+        memset_s(header, sizeof *header, 0, sizeof *header);
+        strncpy_s(header->name, sizeof header->name, file->name, sizeof file->name);
+        strncpy_s(header->mode, sizeof header->mode, "000644", sizeof "000644");
+        strncpy_s(header->magic, sizeof header->magic, "ustar", sizeof "ustar");
+        strncpy_s(header->version, sizeof header->version, "00", sizeof "00");
         header->type = '0';
 
         // Turn the file size into an octal string.
@@ -237,7 +233,7 @@ void fs_flush(void) {
         // Calculate the checksum.
         int checksum = ' ' * sizeof(header->checksum);
         for (unsigned i = 0; i < sizeof(struct tar_header); i++)
-            checksum += (unsigned char) disk[off + i];
+            checksum += (unsigned char)disk[off + i];
 
         for (int i = 5; i >= 0; i--) {
             header->checksum[i] = (checksum % 8) + '0';
@@ -245,7 +241,7 @@ void fs_flush(void) {
         }
 
         // Copy file data.
-        memcpy(header->data, file->data, file->size);
+        memcpy_s(header->data, (sizeof disk) - off, file->data, file->size);
         off += align_up(sizeof(struct tar_header) + file->size, SECTOR_SIZE);
     }
 
@@ -259,7 +255,7 @@ void fs_flush(void) {
 struct file *fs_lookup(const char *filename) {
     for (int i = 0; i < FILES_MAX; i++) {
         struct file *file = &files[i];
-        if (!strcmp(file->name, filename))
+        if (!strncmp(file->name, filename, sizeof file->name))
             return file;
     }
 
