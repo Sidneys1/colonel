@@ -9,6 +9,7 @@ void main(void) {
     prompt:
         printf("> ");
         flush();
+        // exit();
         char cmdline[128] = {};
         for (int i = 0;;) {
             char ch = getchar();

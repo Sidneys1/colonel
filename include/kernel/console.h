@@ -1,6 +1,7 @@
 #pragma once
 
 #include <console.h>
+#include <spinlock.h>
 #include <stddef.h>
 
 extern struct io_config_t {
@@ -18,6 +19,7 @@ struct stream {
     char *buffer;
     uint16_t buffer_r, buffer_w;
     enum StreamDirection direction;
+    struct spinlock lock;
     bool auto_flush;
 };
 

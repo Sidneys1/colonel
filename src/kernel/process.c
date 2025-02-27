@@ -1,11 +1,15 @@
+#include <common.h>
 #include <devices/virtio.h>
 #include <harts.h>
 #include <kernel.h>
 #include <memory/page_allocator.h>
 #include <memory_mgmt.h>
 #include <process.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <devices/plic.h>
+#include <devices/uart.h>
 
 extern char __kernel_base[], __free_ram_end[];
 
@@ -48,9 +52,10 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp, uint32_t *next_sp)
 __attribute__((naked)) void user_entry(void) {
     __asm__ __volatile__("csrw sepc, %[sepc]        \n"
                          "csrw sstatus, %[sstatus]  \n"
+                         "csrw stvec, %[user_entry]\n"
                          "sret                      \n"
                          :
-                         : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE | SSTATUS_SUM));
+                         : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE | SSTATUS_SUM), [user_entry] "r"((uint32_t)user_trap));
 }
 
 struct process *create_process(const void *image, size_t image_size) {
@@ -90,6 +95,16 @@ struct process *create_process(const void *image, size_t image_size) {
 
     // Map virtio
     map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
+    map_page(page_table, plic_base, plic_base, PAGE_R | PAGE_W);
+    paddr_t plic_start = align_down(plic_base, PAGE_SIZE);
+    paddr_t plic_end = plic_base + 0x0600000;
+    int plic_pages = (plic_end - plic_start) / PAGE_SIZE;
+
+    for (int i = 0; i < plic_pages; i++) {
+        paddr_t plic = plic_start + i * PAGE_SIZE;
+        map_page(page_table, plic, plic, PAGE_R | PAGE_W);
+    }
+    map_page(page_table, uart_base, uart_base, PAGE_R | PAGE_W);
 
     // Map user pages.
     for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {

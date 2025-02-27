@@ -54,7 +54,7 @@ void init_root_slabs(void) {
             } else {                                                                                                   \
                 SLAB_DBG("OUT OF CACHES, allocating a new page...\n");                                                 \
                 size_t capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;                   \
-                cache = (struct cache_##SIZE *)alloc_pages(1);                                                         \
+                cache = (struct cache_##SIZE *)alloc_pages(PAGES_PER_SLAB);                                                         \
                 SLAB_DBG(                                                                                              \
                     "Capacity of cache at 0x%p is %d objects of %d bytes each (PAGE size minus %d-byte header).\n",    \
                     cache, capacity, SIZE, sizeof(struct cache_##SIZE));                                               \

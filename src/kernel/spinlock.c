@@ -14,9 +14,12 @@ bool holding(struct spinlock *lk) {
 // Loops (spins) until the lock is acquired.
 void acquire(struct spinlock *lk) {
     push_off();;
-    // TODO  push_off(); // disable interrupts to avoid deadlock.
-    if (holding(lk))
-        PANIC("Spinlock is not reentrant!\n");
+
+    if (holding(lk)) {
+      lk->locked++;
+      __sync_synchronize();
+      return;
+    }
 
     // On RISC-V, sync_lock_test_and_set turns into an atomic swap:
     //   a5 = 1
@@ -38,7 +41,13 @@ void acquire(struct spinlock *lk) {
 
 void release(struct spinlock *lk) {
     if (!holding(lk))
-        PANIC("Cannot release a lock you are not holding.\n");
+        PANIC("Cannot release a lock you are not holding (%p).\n", __builtin_return_address(0));
+
+    if (lk->locked > 1) {
+      __sync_synchronize();
+      lk->locked--;
+      return;
+    }
 
     lk->hart = 0;
 

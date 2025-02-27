@@ -16,7 +16,12 @@ void sbi_putc(char c) {
 }
 
 int sbi_getc() {
+    // printf("sbi getc\n");
+    // TODO: make this non-blocking.
     return sbi_call(0, 0, 0, 0, 0, 0, 0, 2).error;
+    // int ret;
+    // while ((ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2).error) == -1);
+    // return ret;
 }
 
 struct io_config_t kernel_io_config = {.putc = &sbi_putc, .getc = &sbi_getc };
@@ -32,6 +37,7 @@ void s_putchar(struct stream *stream, char ch);
 
 void s_flush(struct stream *stream) {
     if (stream == &stdout) {
+        // kprintf("Flushing stdout\n");
         acquire(&lock);
         // for (int i = 0; i < 10; i++)
         //     sbi_putc('!');
@@ -40,13 +46,14 @@ void s_flush(struct stream *stream) {
         release(&lock);
         return;
     }
+    acquire(&stream->target->lock);
     while (stream->buffer_r < stream->buffer_w)
         s_putchar(stream->target, stream->buffer[stream->buffer_r++ % PAGE_SIZE]);
+    release(&stream->target->lock);
     s_flush(stream->target);
 }
 
 void s_putchar(struct stream *stream, char ch) {
-
     if (stream->buffer != NULL) {
         stream->buffer[stream->buffer_w++ % PAGE_SIZE] = ch;
         if (stream->buffer_w == (stream->buffer_r + PAGE_SIZE) || (stream->auto_flush && ch == '\n'))
@@ -71,10 +78,12 @@ void putchar(char ch) {
     //     // flush();
     // }
 }
-struct stream stdout = {.direction = STREAM_OUT,  /*.no = 0,*/ .target = NULL, .buffer = NULL};
+struct stream stdout = {.direction = STREAM_OUT,  /*.no = 0,*/ .target = NULL, .lock={.locked=0, .name=NULL, .hart=0}, .buffer = NULL};
 
 // Flush console stdout
 void flush(void) {
+    // for (char* i = "flush"; *i != '\0'; i++)
+    //     sbi_putc(*i);
     s_flush(get_hart_local()->stdout);
     // acquire(&lock);
     // // for (int i = 0; i < 5; i++)
@@ -97,12 +106,13 @@ void init_streams(void) {
 }
 
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush) {
-    struct stream *stream = (struct stream*)slab_alloc(&root_slab16);
+    struct stream *stream = (struct stream*)slab_alloc(&root_slab32);
     // TODO: validate target (exists, direction, etc);
     stream->target = target;
     // stream->no = ++streamno;
     stream->direction = dir;
     stream->auto_flush = auto_flush;
+    stream->lock = (struct spinlock){.locked=0, .name=NULL, .hart=0};
 
     if (buffered) {
         // TODO: buffers don't need to be 4k each...

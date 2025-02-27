@@ -110,18 +110,22 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
                 // Do nothing
                 printf("<empty>");
             } else if (IS("reg")) {
-                printf("<cells> address="ANSI_CYAN"0x");
+                printf("<cells[%lux%lu]> address="ANSI_CYAN"0x", self.address_cells, self.size_cells);
                 uint32_t ai = 0;
+                bool nz = false;
                 for (; ai < self.address_cells; ai++) {
-                    uint32_t value = be_to_le(*(uint32_t *)(prop + 1 + ai));
-                    printf("%x", value);
+                    uint32_t value = be_to_le(*((uint32_t *)(prop + 1) + ai));
+                    printf(nz ? "%08x" : "%x", value);
+                    nz |= value;
                 }
                 printf(""ANSI_RESET"");
                 if (self.size_cells) {
+                    nz = false;
                     printf(", size="ANSI_CYAN"0x");
                     for (uint32_t si = 0; si < self.size_cells; si++) {
-                        uint32_t value = be_to_le(*(uint32_t *)(prop + 1 + ai + si));
-                        printf("%x", value);
+                        uint32_t value = be_to_le(*((uint32_t *)(prop + 1) + ai + si));
+                        printf(nz ? "%08x" : "%x", value);
+                        nz |= value;
                     }
                 }
                 printf(""ANSI_RESET"");

@@ -126,7 +126,7 @@ void secondary_handle_trap(__attribute__((unused)) struct trap_frame *f) {
     WRITE_CSR(sepc, user_pc);
 }
 
-__attribute__((naked)) __attribute__((aligned(4))) void secondary_entry(void) {
+__attribute__((naked)) __attribute__((aligned(4))) void user_trap(void) {
     __asm__ __volatile__(
         // Retrieve the kernel stack of the running process from sscratch
         "csrrw sp, sscratch, sp\n"
@@ -171,7 +171,7 @@ __attribute__((naked)) __attribute__((aligned(4))) void secondary_entry(void) {
         "csrw sscratch, a0\n"
 
         "mv a0, sp\n"
-        "call secondary_handle_trap\n"
+        "call handle_trap\n"
 
         "lw ra,  4 * 0(sp)\n"
         "lw gp,  4 * 1(sp)\n"
@@ -212,13 +212,19 @@ uint32_t num_harts;
 bool kernel_verbose = false;
 volatile bool is_shutting_down = false;
 
+#define SSTATUS_ENABLE_SIE 0x02
+
+#define SIE_EXTERNAL 0x200
+#define SIE_TIMERS 0x20
+
 void kernel_shutdown(uint32_t hartid) {
     // kernel_io_config.putc = &sbi_putc;
-    kprintf("[SHUTDOWN] Shutting down from Hart %d. Waiting for all other Harts to stop.\n", hartid);
+    kprintf_c("[SHUTDOWN] Shutting down from Hart %d. Waiting for all other Harts to stop.\n", ANSI_ORANGE, hartid);
     is_shutting_down = true;
 
     uint32_t still_running = 1;
     while (still_running) {
+        kprintf_c("[SHUTDOWN] Checking CPUs...\n", ANSI_ORANGE);
         still_running = 0;
 
         for (uint32_t hid = 0; hid < num_harts; hid++) {
@@ -226,35 +232,44 @@ void kernel_shutdown(uint32_t hartid) {
                 continue;
             enum SBI_HSM_STATE status = hart_get_status(hid);
             if (status != SBI_HSM_STATE_STOPPED) {
-                kprintf("[SHUTDOWN] Hart %d is still running/suspended (%d)...\n", hid, status);
+                kprintf_c("[SHUTDOWN] Hart %d is still running/suspended (%d)...\n", ANSI_ORANGE, hid, status);
                 still_running |= 0x1 << hid;
             }
         }
 
         if (still_running) {
             sbiret value = sbi_call(still_running, 0, 0, 0, 0, 0, SBI_IPI_FN_SEND_IPI, SBI_EXT_IPI);
-            kprintf("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\n\terror=%d\n", still_running, value.value,
+            kprintf_c("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\terror=%d\n", ANSI_ORANGE, still_running, value.value,
             value.error);
             if (value.error)
                 PANIC("OOPS: %d!\n", value.error);
 
-            uint32_t future = READ_CSR(time) + (CLOCK_FREQ / 10);
-            sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
-            kprintf("[SHUTDOWN] Sleeping for 0.1s...\n");
-
+            kprintf_c("[SHUTDOWN] Sleeping for 0.1s...\n", ANSI_ORANGE);
+            // sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
+            // uint32_t sie = READ_CSR(sie);
+            // printf("Disabling external interrupts (%#08x -> %#08x)\n", sie, sie&~SIE_EXTERNAL);
+            WRITE_CSR(sie, READ_CSR(sie) & ~SIE_EXTERNAL);
+            WRITE_CSR(stimecmp, READ_CSR(time) + (CLOCK_FREQ / 10));
             WAIT_FOR_INTERRUPT();
+            // printf("Re-enabling interrupts...\n");
+            WRITE_CSR(sie, READ_CSR(sie) | SIE_EXTERNAL);
         }
     }
-    kprintf("[SHUTDOWN] All other cores are shut down.\n");
+    kprintf_c("[SHUTDOWN] All other cores are shut down.\n", ANSI_ORANGE);
 
-    kprintf("[SHUTDOWN] Calling system shutdown.\n");
+    kprintf_c("[SHUTDOWN] Calling system shutdown.\n", ANSI_ORANGE);
     sbiret value = sbi_call(SBI_SRST_TYPE_SHUTDOWN, SBI_SRST_REASON_NONE, 0, 0, 0, 0, 0, SBI_EXT_SRST);
     PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
-
+uint32_t boot_hart_id;
 void secondary_main(uint32_t hartid) {
-    WRITE_CSR(stvec, (uint32_t)secondary_entry);
+    WRITE_CSR(stvec, (uint32_t)kernel_entry);
     heart_locals[hartid].hartid = hartid;
+    heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
+
+    WRITE_CSR(sstatus, READ_CSR(sstatus) | SSTATUS_ENABLE_SIE);
+    WRITE_CSR(sie, READ_CSR(sie) | SIE_TIMERS);
+
     __asm__ __volatile__("mv gp, %[hartid]\n"
                          "mv tp, %[procid]"
                          :                                      // Output
@@ -263,28 +278,33 @@ void secondary_main(uint32_t hartid) {
                          : "gp", "tp" // Clobbers
     );
 
-    kprintf("[SECONDARY] Hello from hart #%d!\n", get_hart_local()->hartid);
+    kprintf_c("[Hart #%ld] Started!\n", ANSI_CYAN, hartid);
 
     sbiret value;
     while (!is_shutting_down) {
         uint32_t time = READ_CSR(time);
-        kprintf("[SECONDARY] CPU uptime: %d ticks. (%d.%ds?)\n", time, time / CLOCK_FREQ,
+        kprintf_c("[Hart #%ld] CPU uptime: %d ticks. (%d.%ds)\n", ANSI_CYAN, hartid, time, time / CLOCK_FREQ,
                 (time % CLOCK_FREQ) / (CLOCK_FREQ / 1000));
-        uint32_t future = time + (CLOCK_FREQ * 10);
-        sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
+        // sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
+        // uint32_t sie = READ_CSR(sie);
+        // printf("Disabling external interrupts (%#08x -> %#08x)\n", sie, sie&~SIE_EXTERNAL);
+        WRITE_CSR(sie, READ_CSR(sie) & ~SIE_EXTERNAL);
+        WRITE_CSR(stimecmp, time + (CLOCK_FREQ * 10));
         WAIT_FOR_INTERRUPT();
+        // printf("Re-enabling interrupts...\n");
+        WRITE_CSR(sie, READ_CSR(sie) | SIE_EXTERNAL);
     }
 
-    kprintf("[SECONDARY] System is shutting down, stopping Hart #%d.\n", hartid);
+    kprintf_c("[Hart #%ld] System is shutting down, stopping.\n", ANSI_CYAN, hartid);
     value = sbi_call(0, 0, 0, 0, 0, 0, SBI_HSM_FN_HART_STOP, SBI_EXT_HSM);
-    kprintf("[SECONDARY] sbi_hart_stop() value=%d\terror=%d\n", value.value, value.error);
+    kprintf_c("[Hart #%ld] sbi_hart_stop() value=%d\terror=%d\n", ANSI_CYAN, hartid, value.value, value.error);
 }
 
 void secondary_boot(void);
 void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     memset_s(__bss, (size_t)__bss_end - (size_t)__bss, 0, (size_t)__bss_end - (size_t)__bss);
     WRITE_CSR(stvec, (uint32_t)kernel_entry);
-    heart_locals[hartid].hartid = hartid;
+    boot_hart_id = heart_locals[hartid].hartid = hartid;
     __asm__ __volatile__("mv gp, %[hartid]\n"
                          "mv tp, %[procid]"
                          :                                      // Output
@@ -297,8 +317,8 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     init_streams();
     heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
 
-    WRITE_CSR(sstatus, READ_CSR(sstatus) | 0x02);
-    WRITE_CSR(sie, READ_CSR(sie)|0x200);
+    WRITE_CSR(sstatus, READ_CSR(sstatus) | SSTATUS_ENABLE_SIE);
+    WRITE_CSR(sie, READ_CSR(sie)|SIE_EXTERNAL|SIE_TIMERS);
 
 #ifdef TESTS
     slab_test_suite();
@@ -311,65 +331,51 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
     printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
-    if (kernel_verbose)
+    if (kernel_verbose) {
         inspect_device_tree(fdt);
+        sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
+        kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
 
-    // probe_virtio_device(0x10001000);
-    // probe_virtio_device(0x10002000);
-    // probe_virtio_device(0x10003000);
-    // probe_virtio_device(0x10004000);
-    // probe_virtio_device(0x10005000);
-    // probe_virtio_device(0x10006000);
-    // probe_virtio_device(0x10007000);
-    // probe_virtio_device(0x10008000);
+        probe_sbi_extension(SBI_EXT_BASE, "Base");
+        probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
+        probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
+        probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
+        probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
+        putchar('\n');
+    }
 
-    // probe_pci(0x30000000);
+    for (long hid = 0; hid < MAX_HARTS; hid++) {
+        enum SBI_HSM_STATE status = hart_get_status(hid);
+        if (status == SBI_HSM_STATE_ERROR) {
+            num_harts = hid;
+            break;
+        }
+        if (kernel_verbose && hid + 1 == MAX_HARTS)
+            kprintf("There may be more than %d harts...\n", MAX_HARTS);
+    }
+    kprintf("There are %d harts, booting from Hart #%ld.\n", num_harts, boot_hart_id);
 
-    // printf("SEI=0x%x\n", READ_CSR(SEI));
+    for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
+        if (start_hart == hartid)
+            continue;
+        kprintf("Going to try starting Hart %d.\n", start_hart);
+        paddr_t page = alloc_pages(1);
+        sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
+    }
 
-    // inspect_device_tree(fdt);
+    virtio_blk_init();
+    fs_init();
 
-    // if (kernel_verbose) {
-    //     sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
-    //     kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
+    hart_local *hl = get_hart_local();
+    hl->idle_proc = create_process(NULL, 0);
+    set_current_proc(hl->idle_proc);
 
-    //     probe_sbi_extension(SBI_EXT_BASE, "Base");
-    //     probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
-    //     probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
-    //     probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
-    //     probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
-    // }
+    struct file *file = fs_lookup("shell.bin");
+    kprintf("File is %p\n", file);
+    process *proc = create_process(file->data, file->size);
 
-    // for (long hid = 0; hid < MAX_HARTS; hid++) {
-    //     enum SBI_HSM_STATE status = hart_get_status(hid);
-    //     if (status == SBI_HSM_STATE_ERROR) {
-    //         num_harts = hid;
-    //         break;
-    //     }
-    //     if (kernel_verbose && hid + 1 == MAX_HARTS)
-    //         kprintf("There may be more than %d harts...\n", MAX_HARTS);
-    // }
-    // kprintf("There are %d harts.\n", num_harts);
-
-    // for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
-    //     if (start_hart == hartid)
-    //         continue;
-    //     kprintf("Going to try starting Hart %d.\n", start_hart);
-    //     paddr_t page = alloc_pages(1);
-    //     sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
-    // }
-
-    // virtio_blk_init();
-
-    // hart_local *hl = get_hart_local();
-    // hl->idle_proc = create_process(NULL, 0);
-    // set_current_proc(hl->idle_proc);
-
-    // struct file *file = fs_lookup("shell.bin");
-    // process *proc = create_process(file->data, file->size);
-
-    // kprintf("Starting process %d...\n\n", proc->pid);
-    // yield();
+    kprintf("Starting process %d...\n\n", proc->pid);
+    yield();
 #endif
     if (kernel_verbose) {
         slab_dbg(&root_slab4);
@@ -389,10 +395,13 @@ void handle_syscall(struct trap_frame *f) {
         yield();
         break;
     case SYS_PUTCHAR:
+        // PANIC("putc=%c\n", f->a0);
+        // sbi_putc(f->a0);
         putchar(f->a0);
         break;
     case SYS_FLUSH:
         flush();
+        // kprintf("user flush\n");
         break;
     case SYS_GETCHAR:
         while (1) {
@@ -447,6 +456,8 @@ void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
     uint32_t sstatus = READ_CSR(sstatus);
+    uint32_t stvec = READ_CSR(stvec);
+    WRITE_CSR(stvec, (uint32_t)kernel_entry);
 
     // push_off();
     // void (*restore_putc)(char) = kernel_io_config.putc;
@@ -454,13 +465,26 @@ void handle_trap(struct trap_frame *f) {
     // kernel_io_config.putc = &sbi_putc;
     // kernel_io_config.getc = &sbi_getc;
 
-    // printf("entering trap handler scause=%lx, stval=%lx, sepc=%lx\n", scause, stval, user_pc);
+    // kprintf("entering trap handler scause=%lx, stval=%lx, sepc=%lx\n", scause, stval, user_pc);
     bool interrupt = scause & 0x80000000;
     if (interrupt) {
         if (scause == 0x80000009) {
             // printf("Entering plic interrupt...\n");
             plic_interrupt();
+            WRITE_CSR(sip, SIE_EXTERNAL);
             // printf("Exited plic interrupt...\n");
+        } else if(scause == 0x80000005) {
+            // TODO: timer interrupt
+            // user_pc += 4;
+            // WRITE_CSR(sip, SIE_TIMERS);
+            // printf("Cleared timer interrupt, returning to %p\n", user_pc);
+            // printf("%ld:%ld", READ_CSR(time), READ_CSR(stimecmp));
+            // putchar('.');
+            // flush();
+
+            // Clear timer.
+            WRITE_CSR(stimecmp, -1);
+            // PANIC("timer pending: %#08x\n", READ_CSR(sip));
         } else {
             const char* cause = "unknown";
             switch (scause & ~0x80000000) {
@@ -489,11 +513,12 @@ void handle_trap(struct trap_frame *f) {
         PANIC("unexpected trap scause=%lx (%S), stval=%lx, sepc=%lx\n", scause, cause, stval, user_pc);
     }
 
-    // printf("Exiting trap handler (returning to 0x%p)...\n", user_pc);
+    // kprintf("Exiting trap handler (returning to 0x%p)...\n", user_pc);
     // kernel_io_config.putc = restore_putc;
     // kernel_io_config.getc = restore_getc;
     WRITE_CSR(sepc, user_pc);
     WRITE_CSR(sstatus, sstatus);
+    WRITE_CSR(stvec, stvec);
     // pop_off();
 }
 

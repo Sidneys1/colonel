@@ -11,3 +11,4 @@ void uart_pump(void);
 int uart_getc(void);
 void uartputc_sync(char);
 void uart_interrupt(void);
+extern paddr_t uart_base;

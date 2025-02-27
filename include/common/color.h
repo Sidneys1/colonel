@@ -7,3 +7,4 @@
 #define ANSI_YELLOW "\03333m"
 #define ANSI_MAGENTA "\033[35m"
 #define ANSI_CYAN "\033[36m"
+#define ANSI_ORANGE "\033[38;5;202m"

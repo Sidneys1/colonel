@@ -49,12 +49,17 @@ struct trap_frame {
         __tmp;                                                                                                         \
     })
 
-#define kprintf(fmt, ...)                                                                                              \
+#define kprintf_c(fmt, color, ...)                                                                                              \
     do {                                                                                                               \
+        /*void (*b)(char) = kernel_io_config.putc;\
+        kernel_io_config.putc = sbi_putc;*/\
         uint32_t time = READ_CSR(time);                                                                                \
-        printf(ANSI_GREY "[kernel %3d.%03d] " fmt ANSI_RESET, time / 10000000,                                            \
+        printf(color "[kernel %3d.%03d] " fmt ANSI_RESET, time / 10000000,                                            \
                (time % 10000000) / 10000 __VA_OPT__(, ) __VA_ARGS__);                                                  \
+        /*kernel_io_config.putc = b;*/\
     } while (0)
+
+#define kprintf(fmt, ...) kprintf_c(fmt, ANSI_GREY __VA_OPT__(, ) __VA_ARGS__)
 
 #ifdef DEBUG
 #define KDBG(...) kprintf(__VA_ARGS__)
@@ -70,6 +75,7 @@ struct trap_frame {
 
 #define PANIC(fmt, ...)                                                                                                \
     do {                                                                                                               \
+    WRITE_CSR(sie, 0);\
     kernel_io_config.putc = &sbi_putc;\
     kernel_io_config.getc = &sbi_getc;\
         kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);                                         \
@@ -92,3 +98,5 @@ struct trap_frame {
 
 void sbi_putc(char c);
 int sbi_getc();
+extern void user_trap(void);
+extern uint32_t num_harts;
