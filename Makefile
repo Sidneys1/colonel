@@ -128,7 +128,7 @@ format:
 clean:
 	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json disk/shell.bin
 
-shell: disk/shell.bin
+shell: disk/shell.cpp.elf
 
 kernel: ${BUILD_DIR}/kernel.elf
 
@@ -182,12 +182,15 @@ ${BUILD_DIR}/%.elf ${BUILD_DIR}/%.map &: ${BUILD_DIR}/user/user.o ${BUILD_DIR}/u
 ${BUILD_DIR}/%.stripped.elf: ${BUILD_DIR}/%.elf
 	llvm-strip -UR.comment -so $@ $^
 
-disk/shell.bin: ${BUILD_DIR}/shell.cpp.stripped.elf
-	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ disk/shell.bin
+disk/%.elf: ${BUILD_DIR}/%.stripped.elf
+	cp $^ $@
+
+disk/%.bin: ${BUILD_DIR}/%.stripped.elf
+	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ $@
 
 ${BUILD_DIR}/kernel.elf: $(call guard,CFLAGSEXTRA)
 ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${BUILD_DIR}/stdlib.a kernel.ld
 	${CC} ${CFLAGS} ${KCFLAGS} ${LDFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
 
-${BUILD_DIR}/disk.tar: ${DISKFILES} disk/shell.bin
+${BUILD_DIR}/disk.tar: ${DISKFILES} disk/shell.cpp.elf disk/init.elf
 	tar -cf $@ --format=ustar -C disk $(patsubst disk/%,%,$^)

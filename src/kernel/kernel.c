@@ -361,14 +361,20 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     if (strstr(bootargs, CSTR("noinit")).head == NULL) {
         virtio_blk_init();
         fs_init();
-        struct file *file = fs_lookup("shell.bin");
-        if (file == NULL) PANIC("Could not find shell.bin!\n");
+        struct file *file = fs_lookup("shell.cpp.elf");
+        if (file == NULL) PANIC("Could not find `init.elf`!\n");
         kprintf("File is %p\n", file);
-        process *proc = create_process(file->data, file->size);
-
+        // if (inspect_elf((paddr_t)file->data)) {
+        process *proc = create_process_elf((elf32_header*)file->data);
         kprintf("Starting process %hd...\n\n", proc->pid);
         yield();
         kprintf("Returned from init.\n");
+        // }
+        // process *proc = create_process(file->data, file->size);
+
+        // kprintf("Starting process %hd...\n\n", proc->pid);
+        // yield();
+        // kprintf("Returned from init.\n");
     } else {
         kprintf("Kernel was passed `noinit`, not initializing user-space.\n");
         while(true) {

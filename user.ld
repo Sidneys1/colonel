@@ -10,17 +10,17 @@ SECTIONS {
     }
 
     /* read-only data */
-    .rodata : ALIGN(4) {
+    .rodata : ALIGN(4096) {
         *(.rodata .rodata.*);
     }
 
     /* data with initial values */
-    .data : ALIGN(4) {
+    .data : ALIGN(4096) {
         *(.data .data.*);
     }
 
     /* data that should be zero-filled at startup */
-    .bss : ALIGN(4) {
+    .bss : ALIGN(4096) {
         *(.bss .bss.* .sbss .sbss.*);
 
         . = ALIGN(16);
