@@ -212,6 +212,21 @@ SLAB(32, 2)
 
 #undef SLAB
 
+void *_slab_malloc(size_t size) {
+    switch (size) {
+        case 1 ... 4:
+            return slab_alloc(&root_slab4);
+        case 5 ... 8:
+            return slab_alloc(&root_slab8);
+        case 9 ... 16:
+            return slab_alloc(&root_slab16);
+        case 17 ... 32:
+            return slab_alloc(&root_slab32);
+        default:
+           PANIC("No slab allocator of size %lu.\n", size);
+    }
+}
+
 #ifdef TESTS
 
 #define SLAB(SIZE, PAGES_PER_SLAB)                                                                                     \

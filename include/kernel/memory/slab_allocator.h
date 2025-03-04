@@ -1,5 +1,7 @@
 #pragma once
 
+#include <kernel.h>
+#include <util.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
 
@@ -30,10 +32,12 @@
     void slab_free_##SIZE(struct slab_##SIZE *, void *);                                                               \
     void slab_dbg_##SIZE(struct slab_##SIZE *);
 
-SLAB(4)
-SLAB(8)
-SLAB(16)
-SLAB(32)
+#define MAX_SLAB_SIZE 32
+#define SLAB_SIZES X(4) X(8) X(16) X(32)
+
+#define X(SIZE) SLAB(SIZE)
+SLAB_SIZES
+#undef X
 
 #undef SLAB
 
@@ -48,11 +52,16 @@ SLAB(32)
 #define slab_dbg(X) _SLAB_GENERIC_1(slab_dbg, X)
 #define slab_free(X, Y) _SLAB_GENERIC_2(slab_free, X, Y)
 
-extern struct slab_4 root_slab4;
-extern struct slab_8 root_slab8;
-extern struct slab_16 root_slab16;
-extern struct slab_32 root_slab32;
+#define X(SIZE) extern struct slab_##SIZE root_slab##SIZE;
+SLAB_SIZES
+#undef X
+
 void init_root_slabs(void);
+
+extern inline void *_slab_malloc(size_t);
+
+#define slab_malloc(T) ASSERT_STMT(sizeof(T) <= MAX_SLAB_SIZE, "Type too large for available slabs.", (T*)_slab_malloc(sizeof(T)))
+// #define slab_malloc(T) (sizeof(struct{_Static_assert(sizeof(T) <= 32, "Type too large for available slabs.");}), (T*)_slab_malloc(sizeof(T)))
 
 #ifdef TESTS
 

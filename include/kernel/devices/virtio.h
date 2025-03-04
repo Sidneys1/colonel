@@ -108,7 +108,7 @@ struct tar_header {
 struct file {
     bool in_use;      // Indicates if this file entry is in use
     char name[100];   // File name
-    char data[82720]; // File content
+    char data[83232]; // File content
     size_t size;      // File size
 };
 

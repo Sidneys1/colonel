@@ -23,8 +23,9 @@ struct stream {
     bool auto_flush;
 };
 
-extern struct stream stdout;
+extern struct stream stdout, stdin;
 
+void s_putchar(struct stream *stream, char ch);
 void sbi_putc(char);
 void init_streams(void);
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush);

@@ -1,0 +1,5 @@
+#pragma once
+#define restrict __restrict
+extern "C" {
+#include <stdio.h>
+}

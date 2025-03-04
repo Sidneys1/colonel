@@ -234,7 +234,7 @@ void check_compat(const const_string node_name, const fdt_prop *prop, struct dev
         const char * c = node_name.head;
         while (*++c != '@' && *c != '\0' && c != node_name.tail);
         if (*c != '\0' && c != node_name.tail) {
-            struct device_node *node = (struct device_node*)slab_alloc(&root_slab16);
+            struct device_node *node = slab_malloc(struct device_node); //(struct device_node*)slab_alloc(&root_slab16);
             node->next = NULL;
             node->compatible = compatible;
             node->address = strtoul((const_string){.head = c + 1, .tail = node_name.tail}, 16);
@@ -283,8 +283,10 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, co
             const char *name = strings + be_to_le(prop->nameoff);
 
             if (IS("bootargs") && strncmp(node_name, "chosen", 7) == 0) {
-                if (strnlen_s((const char*)(prop + 1), 1))
+                if (strnlen_s((const char*)(prop + 1), 1)) {
                     kprintf("Found boot args: `%S`\n", (char *)(prop + 1));
+                    bootargs = (const_string){.head=(char*)(prop+1),.tail=(char*)(prop+1) + be_to_le(prop->len)};
+                }
 
                 if (strncmp((char *)(prop + 1), "verbose", 8) == 0) {
                     kernel_verbose = true;
@@ -353,7 +355,7 @@ void inspect_device_tree(const fdt_header *fdt) {
 
     // printf("idt\n");
     struct hart_local *hart = get_hart_local();
-    // hart->stdout->auto_flush = false;
+    hart->stdout->auto_flush = false;
     kprintf("Found FDT magic at 0x%x (%x), version %d\n", fdt, be_to_le(fdt->magic), be_to_le(fdt->version));
     kprintf("Boot CPU is /cpus/cpu@%ld in the device tree...\n", be_to_le(fdt->boot_cpuid_phys));
     kprintf("FDT total size is %d bytes\n", be_to_le(fdt->totalsize));
@@ -373,7 +375,7 @@ void inspect_device_tree(const fdt_header *fdt) {
     kprintf("Device tree starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_struct), token);
 
     print_node(NULL, NULL, token, strings, 0);
-    // hart->stdout->auto_flush = true;
+    hart->stdout->auto_flush = true;
     putchar('\n');
-    flush();
+    // flush();
 }

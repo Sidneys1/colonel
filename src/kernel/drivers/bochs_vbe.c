@@ -60,7 +60,7 @@ void init_bochs(struct pci_type0_header *header) {
 
     /* setup video mode */
     bochs_write(BOCHS_VBE_ENABLE, BVE_GETCAPS);
-    int xres = bochs_read(BOCHS_VBE_XRES), yres = bochs_read(BOCHS_VBE_YRES), bpp = bochs_read(BOCHS_VBE_BPP);
+    // int xres = bochs_read(BOCHS_VBE_XRES), yres = bochs_read(BOCHS_VBE_YRES), bpp = bochs_read(BOCHS_VBE_BPP);
     bochs_write(BOCHS_VBE_ENABLE, BVE_DISABLED);
     bochs_write(BOCHS_VBE_BANK, 0);
     bochs_write(BOCHS_VBE_BPP, 32);

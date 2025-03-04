@@ -2,12 +2,14 @@
 #include <harts.h>
 #include <kernel.h>
 #include <memory/page_allocator.h>
+#include <process.h>
 #include <sbi/sbi.h>
 #include <spinlock.h>
 #include <stdio.h>
 #include <devices/uart.h>
 #include <console.h>
 #include <memory/slab_allocator.h>
+#include <console.h>
 
 struct spinlock lock = {.name = "CONSOLE", .hart = 0, .locked = 0};
 
@@ -29,11 +31,14 @@ struct io_config_t kernel_io_config = {.putc = &sbi_putc, .getc = &sbi_getc };
 int getchar(void) {
     acquire(&lock);
     int ret = kernel_io_config.getc();
+    if (ret != -1)
+        s_putchar(&stdin, ret);
+    ret = -1;
+    if (stdin.buffer_r < stdin.buffer_w)
+        ret = stdin.buffer[stdin.buffer_r++ % PAGE_SIZE];
     release(&lock);
     return ret;
 }
-
-void s_putchar(struct stream *stream, char ch);
 
 void s_flush(struct stream *stream) {
     if (stream == &stdout) {
@@ -46,6 +51,9 @@ void s_flush(struct stream *stream) {
         release(&lock);
         return;
     }
+    if (stream == &stdin) {
+        PANIC("Can't flush STDIN yet\n");
+    }
     acquire(&stream->target->lock);
     while (stream->buffer_r < stream->buffer_w)
         s_putchar(stream->target, stream->buffer[stream->buffer_r++ % PAGE_SIZE]);
@@ -56,13 +64,19 @@ void s_flush(struct stream *stream) {
 void s_putchar(struct stream *stream, char ch) {
     if (stream->buffer != NULL) {
         stream->buffer[stream->buffer_w++ % PAGE_SIZE] = ch;
-        if (stream->buffer_w == (stream->buffer_r + PAGE_SIZE) || (stream->auto_flush && ch == '\n'))
+        if (stream->direction == STREAM_OUT && (stream->buffer_w == (stream->buffer_r + PAGE_SIZE) || (stream->auto_flush && ch == '\n')))
             s_flush(stream);
         return;
     }
 
     if (stream == &stdout) {
         kernel_io_config.putc(ch);
+        return;
+    }
+
+    if (stream == &stdin) {
+        // TODO: sleeping
+        // wakeup_all(getchar);
         return;
     }
 
@@ -78,7 +92,8 @@ void putchar(char ch) {
     //     // flush();
     // }
 }
-struct stream stdout = {.direction = STREAM_OUT,  /*.no = 0,*/ .target = NULL, .lock={.locked=0, .name=NULL, .hart=0}, .buffer = NULL};
+struct stream stdout = {.direction = STREAM_OUT,  /*.no = 0,*/ .target = NULL, .lock={.locked=0, .name="STDOUT", .hart=0}, .buffer = NULL},
+stdin = {.direction = STREAM_IN, .target = NULL, .lock={.locked=0, .name="STDIN", .hart=0}, .buffer=NULL};
 
 // Flush console stdout
 void flush(void) {
@@ -103,10 +118,11 @@ void init_streams(void) {
     // create_slab(&streams);
 
     stdout.buffer = (char*)alloc_pages(1);
+    stdin.buffer = (char*)alloc_pages(1);
 }
 
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush) {
-    struct stream *stream = (struct stream*)slab_alloc(&root_slab32);
+    struct stream *stream = slab_malloc(struct stream); //  (struct stream*)slab_alloc(&root_slab32);
     // TODO: validate target (exists, direction, etc);
     stream->target = target;
     // stream->no = ++streamno;

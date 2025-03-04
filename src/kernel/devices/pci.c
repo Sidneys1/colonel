@@ -13,7 +13,7 @@ struct pci_driver drivers[] = {
 
 struct pci_ll *pci_ll_head = NULL, *bridges[256] = {};
 
-void print_pci_bar(struct pci_type0_header *type0, char num) {
+void print_pci_bar(struct pci_type0_header *type0, int num) {
     struct bar *bar = &type0->bars[num];
     // TODO: if ((type0->pci_header.command & 0x02) == 0x02)
     //           PANIC("<gotta disable>\n");
@@ -95,7 +95,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
     // putchar('\n');
 
     if (device_header->class_code == 0x06) {
-        struct pci_ll *bridge = (struct pci_ll *)slab_alloc(&root_slab16);
+        struct pci_ll *bridge = slab_malloc(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
         bridge->first_child = NULL;
         bridge->next = NULL;
         // bridge->prev = pci_ll_tail;
@@ -107,7 +107,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
         if (slot == 0)
             bridges[bus] = bridge;
     } else {
-        struct pci_ll *device = (struct pci_ll *)slab_alloc(&root_slab16);
+        struct pci_ll *device = slab_malloc(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
         device->next = NULL;
         struct pci_ll *bridge = bridges[bus];
         if (bridge->first_child == NULL)

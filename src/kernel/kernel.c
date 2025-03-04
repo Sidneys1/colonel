@@ -24,6 +24,8 @@ extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[],
 extern struct file files[FILES_MAX];
 extern struct process procs[PROCS_MAX];
 
+const_string bootargs = CSTR("");
+
 // Currently running process
 
 _Noreturn void abort(void) { PANIC("Call from abort().\n"); }
@@ -109,22 +111,6 @@ __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
         "lw sp,  4 * 30(sp)\n"
         // "addi sp, sp, 4 * 31\n"
         "sret\n");
-}
-
-void secondary_handle_trap(__attribute__((unused)) struct trap_frame *f) {
-    uint32_t scause = READ_CSR(scause);
-    uint32_t stval = READ_CSR(stval);
-    uint32_t user_pc = READ_CSR(sepc);
-    if (scause == SCAUSE_ECALL) {
-        PANIC("ECALL ON SECONDARY THREAD!\n");
-        user_pc += 4;
-    } else {
-        PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
-    }
-
-    kprintf("[SECONDARY] trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
-
-    WRITE_CSR(sepc, user_pc);
 }
 
 __attribute__((naked)) __attribute__((aligned(4))) void user_trap(void) {
@@ -263,6 +249,8 @@ void kernel_shutdown(uint32_t hartid) {
     PANIC("system_reset:\n\tvalue=0x%x\n\terror=%d\n", value.value, value.error);
 }
 uint32_t boot_hart_id;
+
+__attribute__((used))
 void secondary_main(uint32_t hartid) {
     WRITE_CSR(stvec, (uint32_t)kernel_entry);
     heart_locals[hartid].hartid = hartid;
@@ -290,7 +278,7 @@ void secondary_main(uint32_t hartid) {
         // uint32_t sie = READ_CSR(sie);
         // printf("Disabling external interrupts (%#08x -> %#08x)\n", sie, sie&~SIE_EXTERNAL);
         WRITE_CSR(sie, READ_CSR(sie) & ~SIE_EXTERNAL);
-        WRITE_CSR(stimecmp, time + (CLOCK_FREQ * 10));
+        WRITE_CSR(stimecmp, time + (CLOCK_FREQ * 1));
         WAIT_FOR_INTERRUPT();
         // printf("Re-enabling interrupts...\n");
         WRITE_CSR(sie, READ_CSR(sie) | SIE_EXTERNAL);
@@ -325,70 +313,83 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     slab_test_suite();
 #else
     device_tree_init(fdt);
-    printf("\n\n");
-    printf("\033[1;93m ______     ______     __         ______     __   __     ______     __       \n");
-    printf("/\\  ___\\   /\\  __ \\   /\\ \\       /\\  __ \\   /\\ \"-.\\ \\   /\\  ___\\   /\\ \\      \n");
-    printf("\\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\-.  \\  \\ \\  __\\   \\ \\ \\____ \n");
-    printf(" \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n");
-    printf("  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
+    printf("\n\n"
+           "\033[1;93m ______     ______     __         ______     __   __     ______     __       \n"
+           "/\\  ___\\   /\\  __ \\   /\\ \\       /\\  __ \\   /\\ \"-.\\ \\   /\\  ___\\   /\\ \\      \n"
+           "\\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\-.  \\  \\ \\  __\\   \\ \\ \\____ \n"
+           " \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n"
+           "  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
     probe_pci(0x30000000);
 
-    // if (kernel_verbose) {
-    //     inspect_device_tree(fdt);
-    //     sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
-    //     kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
+    if (kernel_verbose) {
+        inspect_device_tree(fdt);
+        sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
+        kprintf("get_spec_version: value=0x%x\terror=%d\n", value.value, value.error);
 
-    //     probe_sbi_extension(SBI_EXT_BASE, "Base");
-    //     probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
-    //     probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
-    //     probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
-    //     probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
-    //     putchar('\n');
-    // }
+        probe_sbi_extension(SBI_EXT_BASE, "Base");
+        probe_sbi_extension(SBI_EXT_DBCN, "\"DBCN\" Debug Console");
+        probe_sbi_extension(SBI_EXT_HSM, "\"HSM\" Hart State Management");
+        probe_sbi_extension(SBI_EXT_SRST, "\"SRST\" System Reset");
+        probe_sbi_extension(SBI_EXT_TIME, "\"TIME\" Timer");
+        putchar('\n');
+    }
 
-    // for (long hid = 0; hid < MAX_HARTS; hid++) {
-    //     enum SBI_HSM_STATE status = hart_get_status(hid);
-    //     if (status == SBI_HSM_STATE_ERROR) {
-    //         num_harts = hid;
-    //         break;
-    //     }
-    //     if (kernel_verbose && hid + 1 == MAX_HARTS)
-    //         kprintf("There may be more than %d harts...\n", MAX_HARTS);
-    // }
-    // kprintf("There are %d harts, booting from Hart #%ld.\n", num_harts, boot_hart_id);
+    for (long hid = 0; hid < MAX_HARTS; hid++) {
+        enum SBI_HSM_STATE status = hart_get_status(hid);
+        if (status == SBI_HSM_STATE_ERROR) {
+            num_harts = hid;
+            break;
+        }
+        if (kernel_verbose && hid + 1 == MAX_HARTS)
+            kprintf("There may be more than %d harts...\n", MAX_HARTS);
+    }
+    kprintf("There are %d harts, booting from Hart #%ld.\n", num_harts, boot_hart_id);
 
-    // for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
-    //     if (start_hart == hartid)
-    //         continue;
-    //     kprintf("Going to try starting Hart %d.\n", start_hart);
-    //     paddr_t page = alloc_pages(1);
-    //     sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
-    // }
+    for (uint32_t start_hart = 0; start_hart < num_harts; start_hart++) {
+        if (start_hart == hartid)
+            continue;
+        kprintf("Going to try starting Hart %d.\n", start_hart);
+        paddr_t page = alloc_pages(1);
+        sbi_call(start_hart, (uint32_t)&secondary_boot, (uint32_t)page, 0, 0, 0, SBI_HSM_FN_HART_START, SBI_EXT_HSM);
+    }
 
-    // virtio_blk_init();
-    // fs_init();
+    hart_local *hl = get_hart_local();
+    hl->idle_proc = create_process(NULL, 0);
+    set_current_proc(hl->idle_proc);
 
-    // hart_local *hl = get_hart_local();
-    // hl->idle_proc = create_process(NULL, 0);
-    // set_current_proc(hl->idle_proc);
+    if (strstr(bootargs, CSTR("noinit")).head == NULL) {
+        virtio_blk_init();
+        fs_init();
+        struct file *file = fs_lookup("shell.bin");
+        if (file == NULL) PANIC("Could not find shell.bin!\n");
+        kprintf("File is %p\n", file);
+        process *proc = create_process(file->data, file->size);
 
-    // struct file *file = fs_lookup("shell.bin");
-    // kprintf("File is %p\n", file);
-    // process *proc = create_process(file->data, file->size);
+        kprintf("Starting process %hd...\n\n", proc->pid);
+        yield();
+        kprintf("Returned from init.\n");
+    } else {
+        kprintf("Kernel was passed `noinit`, not initializing user-space.\n");
+        while(true) {
+            int c = getchar();
+            if (c == -1) {
+                yield();
+                WAIT_FOR_INTERRUPT();
+                continue;
+            }
+            putchar(c);
+        }
+    }
 
-    // kprintf("Starting process %d...\n\n", proc->pid);
-    // yield();
-
-    volatile uint64_t i = 0;
-    for (uint64_t x = 0; x < 1000000000; i++, x++);
-#endif
     if (kernel_verbose) {
         slab_dbg(&root_slab4);
         slab_dbg(&root_slab8);
         slab_dbg(&root_slab16);
         slab_dbg(&root_slab32);
     }
+
+#endif
 
     // Shutdown?
     kernel_shutdown(hartid);
@@ -416,13 +417,14 @@ void handle_syscall(struct trap_frame *f) {
                 f->a0 = ch;
                 break;
             }
-
+            // kprintf("Sleeping process...\n");
+            // sleep(get_current_proc(), getchar);
             yield();
         }
         break;
     case SYS_EXIT:
         process *current_proc = get_current_proc();
-        kprintf("process %d exited\n", current_proc->pid);
+        kprintf("process %hd exited\n", current_proc->pid);
         current_proc->state = PROC_EXITED;
         yield();
         PANIC("unreachable");
@@ -457,6 +459,7 @@ void handle_syscall(struct trap_frame *f) {
     }
 }
 
+__attribute__((used))
 void handle_trap(struct trap_frame *f) {
     uint32_t user_pc = READ_CSR(sepc);
     uint32_t scause = READ_CSR(scause);

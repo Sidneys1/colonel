@@ -3,8 +3,10 @@
 #include <harts.h>
 #include <kernel.h>
 #include <memory/page_allocator.h>
+#include <memory/slab_allocator.h>
 #include <memory_mgmt.h>
 #include <process.h>
+#include <spinlock.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +15,7 @@
 
 extern char __kernel_base[], __free_ram_end[];
 
-struct process procs[PROCS_MAX] = {}; // All process control structures.
+struct process* procs[PROCS_MAX] = {}; // All process control structures.
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp, uint32_t *next_sp) {
     __asm__ __volatile__("addi sp, sp, -13 * 4\n" // Allocate stack space for 13 4-byte registers
@@ -63,18 +65,30 @@ struct process *create_process(const void *image, size_t image_size) {
     struct process *proc = NULL;
     int i;
     for (i = 0; i < PROCS_MAX; i++) {
-        if (procs[i].state == PROC_UNUSED) {
-            proc = &procs[i];
+        if (procs[i] != NULL && procs[i]->state == PROC_UNUSED) {
+            proc = procs[i];
             break;
+        }
+    }
+
+    if (proc == NULL) {
+        for (i = 0; i < PROCS_MAX; i++) {
+            if (procs[i] == NULL) {
+                // proc = procs[i] = (struct process*)slab_alloc(&root_slab32);
+                proc = procs[i] = slab_malloc(struct process);
+                break;
+            }
         }
     }
 
     if (!proc)
         PANIC("no free process slots");
 
+    proc->stack = (uint8_t(*)[STACK_SIZE])alloc_pages(PAGES_PER_STACK);
+
     // Stack callee-saved registers. These register values will be restored in
     // the first context switch in switch_context.
-    uint32_t *sp = (uint32_t *)&proc->stack[sizeof(proc->stack)];
+    uint32_t *sp = (uint32_t *)&((*proc->stack)[STACK_SIZE]);
     *--sp = 0;                    // s11
     *--sp = 0;                    // s10
     *--sp = 0;                    // s9
@@ -91,6 +105,10 @@ struct process *create_process(const void *image, size_t image_size) {
 
     uint32_t *page_table = (uint32_t *)alloc_pages(1);
     for (paddr_t paddr = (paddr_t)__kernel_base; paddr < (paddr_t)__free_ram_end; paddr += PAGE_SIZE)
+        map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+
+    // Map stack
+    for (paddr_t paddr = (paddr_t)proc->stack; paddr < (paddr_t)&((*proc->stack)[STACK_SIZE]); paddr += PAGE_SIZE)
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map virtio
@@ -122,7 +140,7 @@ struct process *create_process(const void *image, size_t image_size) {
 
     // Initialize fields.
     proc->pid = i - 1;
-    proc->state = PROC_RUNNABLE;
+    proc->state = PROC_RUNNING;
     proc->sp = (uint32_t)sp;
     proc->page_table = page_table;
     return proc;
@@ -133,10 +151,10 @@ void kyield(void) {
     hart_local *hl = get_hart_local();
     process *current_proc = get_current_proc();
     process *next = hl->idle_proc;
-    for (int i = 1; i <= PROCS_MAX; i++) {
-        process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+    for (uint16_t i = 1; i <= PROCS_MAX; i++) {
+        process *proc = procs[(current_proc->pid + i) % PROCS_MAX];
         // kprintf("Considering process %d (%d).\n", proc->pid, proc->state);
-        if (proc->state == PROC_RUNNABLE && proc->pid >= 0) {
+        if (proc != NULL && proc->state == PROC_RUNNING && proc->pid >= 0) {
             next = proc;
             break;
         }
@@ -162,10 +180,41 @@ void kyield(void) {
         :
         // Don't forget the trailing comma!
         : [satp] "r"(SATP_SV32 | ((uint32_t)next->page_table / PAGE_SIZE)), [sscratch] "r"(
-                                                                                (uint32_t)&next->stack[sizeof(
-                                                                                    next->stack)]));
+                                                                                (uint32_t)&((*next->stack)[STACK_SIZE])));
 
     switch_context(&prev->sp, &next->sp);
 }
 
 void yield(void) { kyield(); }
+
+// void wakeup(process *proc) {
+//     acquire(&proc->lock);
+//     if (proc->sleep_on == NULL)
+//         PANIC("Wakeup is not re-entrant!\n");
+
+//     proc->sleep_on = NULL;
+//     proc->state = PROC_RUNNING;
+
+//     release(&proc->lock);
+// }
+
+// void wakeup_all(void *on) {
+//     printf("Trying to wakeup on %p\n", on);
+//     for (int i = 0; i < PROCS_MAX; i++) {
+//         if (procs[i].state == PROC_WAITING && procs[i].sleep_on == on) {
+//             printf("Process %d was waiting on %p!\n", procs[i].pid, procs[i].sleep_on);
+//             wakeup(&procs[i]);
+//         }
+//     }
+// }
+
+// void sleep(process *proc, void *on) {
+//     acquire(&proc->lock);
+//     if (proc->sleep_on != NULL)
+//         PANIC("Sleep is not re-entrant!\n");
+
+//     proc->sleep_on = on;
+//     proc->state = PROC_WAITING;
+
+//     release(&proc->lock);
+// }

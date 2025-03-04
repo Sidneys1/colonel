@@ -8,13 +8,13 @@
     (const_string) { .head = x, .tail = x + sizeof x } // NOLINT
 
 typedef struct string {
-    char *const head;
-    char *const tail;
+    char * head;
+    char * tail;
 } string;
 
 typedef struct const_string {
-    const char *const head;
-    const char *const tail;
+    const char * head;
+    const char * tail;
 } const_string;
 
 extern inline void *memset(void *buf, char c, size_t n);
@@ -32,3 +32,4 @@ extern inline int strncmp(const char *lhs, const char *rhs, size_t count);
 extern inline string strcpy(string s1, const_string s2);
 // extern inline char *strncpy(char *restrict s1, const char *restrict s2, size_t n);
 extern inline char *strncpy_s(char *restrict s1, rsize_t s1max, const char *restrict s2, size_t n);
+extern inline const_string strstr(const const_string s1, const const_string s2);

@@ -107,3 +107,27 @@ string strcpy(string s1, const_string s2) {
     (void)strncpy_s(s1.head, s1_len, s2.head, s2_len < s1_len ? s2_len : s1_len);
     return s1;
 }
+
+char *strchr(const const_string str, int c) {
+  const char *s = str.head;
+  do {
+    if (*s == c) {
+      return (char *)s;
+    }
+  } while (*s++ && s < str.tail);
+  return NULL;
+}
+
+const_string strstr(const const_string s1, const const_string s2) {
+  const char *p = s1.head;
+  const size_t len = s2.tail - s2.head;
+
+  if (!len)
+    return (const_string){.head = s1.head, .tail = s1.head};
+
+  for (; (p = strchr((const_string){.head=p, .tail=s1.tail}, *s2.head)) != 0; p++) {
+    if (strncmp(p, s2.head, len) == 0)
+      return (const_string){.head=p, .tail=p+(s2.tail - s2.head)};
+  }
+  return (const_string){.head=NULL, .tail=NULL};
+}

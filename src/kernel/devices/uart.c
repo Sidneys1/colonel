@@ -1,4 +1,5 @@
 #include <kernel.h>
+#include <process.h>
 #include <stddef.h>
 #include <spinlock.h>
 #include <devices/plic.h>
@@ -146,7 +147,12 @@ void uart_interrupt(void) {
     // printf("UART interrupt!\n");
     while (1) {
         int c = uart_getc();
+        // printf("Trying to get a char (%d)...\n", c);
         if (c == -1) break;
+        printf("Got a char (%c)!\n", c);
+        s_putchar(&stdin, c);
+        // TODO: wakeup
+        // wakeup_all(getchar);
         // printf("Got UART char: %c\n", (char)c);
     }
     // printf("Entering UART pump\n");
