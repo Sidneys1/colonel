@@ -4,10 +4,11 @@
 #include <kernel.h>
 #include <stddef.h>
 
-#define SECTOR_SIZE                512
+#include <io.h>
+
 #define VIRTQ_ENTRY_NUM            16
 #define VIRTIO_DEVICE_BLK          2
-#define VIRTIO_BLK_PADDR           0x10001000
+// #define VIRTIO_BLK_PADDR           0x10001000
 #define VIRTIO_REG_MAGIC           0x00
 #define VIRTIO_REG_VERSION         0x04
 #define VIRTIO_REG_DEVICE_ID       0x08
@@ -29,6 +30,31 @@
 #define VIRTQ_AVAIL_F_NO_INTERRUPT 1
 #define VIRTIO_BLK_T_IN            0
 #define VIRTIO_BLK_T_OUT           1
+
+enum VIRTIO_DEVICE_IDS {
+    VIRTIO_DEVICE_NETWORK_CARD = 1,
+    VIRTIO_DEVICE_BLOCK = 2,
+    VIRTIO_DEVICE_CONSOLE = 3,
+    VIRTIO_DEVICE_ENTROPY_SOURCE = 4,
+    VIRTIO_DEVICE_MEMORY_BALLOONING_TRADITIONAL = 5,
+    VIRTIO_DEVICE_IOMEMORY = 6,
+    VIRTIO_DEVICE_RPMSG = 7,
+    VIRTIO_DEVICE_SCSI_HOST = 8,
+    VIRTIO_DEVICE_9P_TRANSPORT = 9,
+    VIRTIO_DEVICE_MAC80211_WLAN = 10,
+    VIRTIO_DEVICE_RPROC_SERIAL = 11,
+    VIRTIO_DEVICE_VIRTIO_CAIF = 12,
+    VIRTIO_DEVICE_MEMORY_BALLOON = 13,
+    VIRTIO_DEVICE_GPU_DEVICE = 16,
+    VIRTIO_DEVICE_TIMER_CLOCK = 17,
+    VIRTIO_DEVICE_INPUT = 18,
+    VIRTIO_DEVICE_SOCKET = 19,
+    VIRTIO_DEVICE_CRYPTO = 20,
+    VIRTIO_DEVICE_SIGNAL_DISTRIBUTION_MODULE = 21,
+    VIRTIO_DEVICE_PSTORE = 22,
+    VIRTIO_DEVICE_IOMMU = 23,
+    VIRTIO_DEVICE_MEMORY = 24,
+};
 
 // Virtqueue Descriptor area entry.
 struct virtq_desc {
@@ -79,43 +105,27 @@ struct virtio_blk_req {
     uint8_t status;
 } __attribute__((packed));
 
-#define FILES_MAX     2
+
 // #define DISK_MAX_SIZE align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
-#define DISK_MAX_SIZE align_up(61440, SECTOR_SIZE)
+// #define DISK_MAX_SIZE align_up(4194304, SECTOR_SIZE)
 
-struct tar_header {
-    char name[100];
-    char mode[8];
-    char uid[8];
-    char gid[8];
-    char size[12];
-    char mtime[12];
-    char checksum[8];
-    char type;
-    char linkname[100];
-    char magic[6];
-    char version[2];
-    char uname[32];
-    char gname[32];
-    char devmajor[8];
-    char devminor[8];
-    char prefix[155];
-    char padding[12];
-    char data[]; // Array pointing to the data area following the header
-                 // (flexible array member)
-} __attribute__((packed));
-
-struct file {
-    bool in_use;      // Indicates if this file entry is in use
-    char name[100];   // File name
-    char data[29108]; // File content
-    size_t size;      // File size
+struct virtio_device {
+    struct virtio_device *next;
+    paddr_t base_addr;
+    struct virtio_virtq *queue;
+    enum VIRTIO_DEVICE_IDS device_type;
 };
 
-void fs_init(void);
-void fs_flush(void);
-void virtio_blk_init(void);
-void read_write_disk(void *buf, unsigned sector, int is_write);
-struct file *fs_lookup(const char *);
+struct virtio_blk_device {
+    INHERITS(struct block_device);
+    // INHERITS(struct virtio_device);
+    struct virtio_device virtio;
+    // struct virtio_device virtio;
+    struct virtio_blk_req *requests;
+    uint32_t sector_count;
+};
+
+struct virtio_blk_device* virtio_blk_init(paddr_t);
+void read_write_disk(struct virtio_blk_device *dev, void *buf, unsigned sector, int is_write);
 
 void probe_virtio_device(paddr_t location);

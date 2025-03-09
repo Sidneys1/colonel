@@ -281,7 +281,7 @@ struct process *create_process_elf(const elf32_header *elf32) {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map virtio
-    map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
+    map_page(page_table, 0x10001000, 0x10001000, PAGE_R | PAGE_W);
     map_page(page_table, plic_base, plic_base, PAGE_R | PAGE_W);
     paddr_t plic_start = align_down(plic_base, PAGE_SIZE);
     paddr_t plic_end = plic_base + 0x0600000;
@@ -381,7 +381,7 @@ struct process *create_process(const void *image, size_t image_size) {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map virtio
-    map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
+    map_page(page_table, 0x10001000, 0x10001000, PAGE_R | PAGE_W);
     map_page(page_table, plic_base, plic_base, PAGE_R | PAGE_W);
     paddr_t plic_start = align_down(plic_base, PAGE_SIZE);
     paddr_t plic_end = plic_base + 0x0600000;

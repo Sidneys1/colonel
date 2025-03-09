@@ -32,8 +32,8 @@
     void slab_free_##SIZE(struct slab_##SIZE *, void *);                                                               \
     void slab_dbg_##SIZE(struct slab_##SIZE *);
 
-#define MAX_SLAB_SIZE 32
-#define SLAB_SIZES X(4) X(8) X(16) X(32)
+#define MAX_SLAB_SIZE 64
+#define SLAB_SIZES X(4) X(8) X(16) X(32) X(64)
 
 #define X(SIZE) SLAB(SIZE)
 SLAB_SIZES
@@ -43,7 +43,7 @@ SLAB_SIZES
 
 #define _SLAB_GENERIC_CASE(f, SIZE) struct slab_##SIZE * : f##_##SIZE
 #define _SLAB_GENERIC_PARAMS(f)                                                                                        \
-    _SLAB_GENERIC_CASE(f, 4), _SLAB_GENERIC_CASE(f, 8), _SLAB_GENERIC_CASE(f, 16), _SLAB_GENERIC_CASE(f, 32)
+    _SLAB_GENERIC_CASE(f, 4), _SLAB_GENERIC_CASE(f, 8), _SLAB_GENERIC_CASE(f, 16), _SLAB_GENERIC_CASE(f, 32), _SLAB_GENERIC_CASE(f, 64)
 #define _SLAB_GENERIC_1(f, X) _Generic((X), _SLAB_GENERIC_PARAMS(f))(X)
 #define _SLAB_GENERIC_2(f, X, Y) _Generic((X), _SLAB_GENERIC_PARAMS(f))(X, Y)
 

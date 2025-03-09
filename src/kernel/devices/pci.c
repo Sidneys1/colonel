@@ -123,9 +123,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
 }
 
 void probe_pci(paddr_t base) {
-    if (sizeof(struct pci_ll) > 16)
-        PANIC("PCI Linked List entry is too big for a slab16 (%d > 16)!\n", sizeof(struct pci_ll));
-    kprintf("Beginning PCI enumeration...\n");
+    kprintf("Beginning PCI enumeration at %p...\n", base);
     for (uint16_t bus = 0; bus < 256; bus++)
         for (uint16_t slot = 0; slot < 256; slot++)
             for (uint16_t func = 0; func < 256; func++)

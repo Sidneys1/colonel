@@ -16,10 +16,21 @@ QAPPEND=verbose
 QFLAGS=-machine virt -bios default --no-reboot \
         -d unimp,guest_errors,int,cpu_reset -D ${LOG} \
         -m ${MEM} -smp ${CORES} -serial mon:stdio \
+\
         -drive id=drive0,file=${BUILD_DIR}/disk.tar,format=raw,if=none \
         -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+\
+        -drive id=drive1,file=${BUILD_DIR}/disk.fat12,format=raw,if=none \
+        -device virtio-blk-device,drive=drive1,bus=virtio-mmio-bus.1 \
+\
         -device VGA,romfile=/usr/share/vgabios/vgabios-stdvga.bin \
         -kernel ${BUILD_DIR}/kernel.elf -append ${QAPPEND}
+#         -drive id=drive2,file=${BUILD_DIR}/disk.gpt.fat16,format=raw,if=none \
+#         -device virtio-blk-device,drive=drive2,bus=virtio-mmio-bus.2 \
+# \
+#        -drive id=drive3,file=${BUILD_DIR}/disk.gpt.fat32,format=raw,if=none \
+#        -device virtio-blk-device,drive=drive3,bus=virtio-mmio-bus.3 \
+#\
 
 # objcopy executable
 OBJCOPY:=llvm-objcopy
@@ -77,7 +88,7 @@ USER_OBJ_CPP:=$(USER_SRC_CPP:src/%.cpp=${BUILD_DIR}/%.cpp.o)
 DEPS:=$(call rwildcard,build,*.d)
 
 # Files needed for building disk image (tar).
-DISKFILES:=$(wildcard disk/*)
+DISKFILES:=disk/init.elf disk/shell.cpp.elf
 
 .PHONY: all run run-quiet debug test tidy format clean shell kernel disk graph
 .INTERMEDIATE: ${BUILD_DIR}/shell.bin
@@ -92,7 +103,7 @@ run-quiet: QAPPEND=""
 run-quiet: run
 run-noinit: run
 
-run: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
+run: kernel disk
 	${QEMU} ${QFLAGS}
 
 debug: ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/disk.tar
@@ -126,13 +137,13 @@ format:
 	clang-format -i $$(find src/ include/ -name '*.h' -o -name '*.c')
 
 clean:
-	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json disk/shell.bin
+	@rm -vrf ${BUILD_DIR}/ qemu.log compile_commands.json disk/*
 
 shell: disk/shell.cpp.elf
 
 kernel: ${BUILD_DIR}/kernel.elf
 
-disk: ${BUILD_DIR}/disk.tar
+disk: ${BUILD_DIR}/disk.tar ${BUILD_DIR}/disk.fat12 ${BUILD_DIR}/disk.gpt.fat16 ${BUILD_DIR}/disk.gpt.fat32
 
 graph:
 	make -dn MAKE=: all | sed -rn "s/^(\s+)Considering target file '(.*)'\.$$/\1\2/p"
@@ -192,5 +203,60 @@ ${BUILD_DIR}/kernel.elf: $(call guard,CFLAGSEXTRA)
 ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${BUILD_DIR}/stdlib.a kernel.ld
 	${CC} ${CFLAGS} ${KCFLAGS} ${LDFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^
 
-${BUILD_DIR}/disk.tar: ${DISKFILES} disk/shell.cpp.elf disk/init.elf
-	tar -cf $@ --format=ustar -C disk $(patsubst disk/%,%,$^)
+${BUILD_DIR}/disk.tar: ${DISKFILES}
+	@mkdir -p "$(@D)"
+	@echo "Updating $@..."
+	@if [ ! -f "$@" ]; then \
+        echo "  Creating archive $@..."; \
+        tar -vcf "$@" --format=ustar -C disk $(patsubst disk/%,"%",$^) | sed -e 's/^/  - /'; \
+    else \
+        echo "  Deleting outdated files ($?)..."; \
+        tar -vf "$@" --format=ustar --delete $(patsubst disk/%,"%",$?) | sed -e 's/^/  - /' \
+          && echo "  Adding updated files..." \
+          && tar -vrf $@ --format=ustar -C disk $(patsubst disk/%,"%",$?) | sed -e 's/^/  - /'; \
+    fi
+
+PARTITION_SIZE_MB?=2
+PARTITION_ALIGNMENT?=1048576
+PARTITION_NAME?=Colonel
+
+${BUILD_DIR}/disk.fat12: ${DISKFILES}
+	@mkdir -p "$(@D)"
+	@echo "Updating $@..."
+	@if [ ! -f "$@" ]; then \
+        echo "  Creating image $@..."; \
+        truncate -s $$(( ${PARTITION_SIZE_MB}*(1<<20) )) "$@"; \
+        echo "  - Formatting image as FAT12..."; \
+        mformat -i "$@" -t $$(( ( ( ( ${PARTITION_SIZE_MB}*(1<<20) ) + ${PARTITION_ALIGNMENT} - 1 )/${PARTITION_ALIGNMENT} * ${PARTITION_ALIGNMENT} ) >> 20 )) -h 64 -s 32 -v colonel ::; \
+    fi
+	@echo "  Copying files to $@..."
+	@mcopy -voi "$@" $(patsubst %,"%",$?) :: 2>&1 | sed -e 's/^/  - /'
+
+${BUILD_DIR}/disk.gpt.fat16: ${DISKFILES}
+	@mkdir -p "$(@D)"
+	@echo "Updating $@..."
+	@if [ ! -f "$@" ]; then \
+        echo "  Creating image $@..."; \
+        truncate -s $$(( ( ( ( ${PARTITION_SIZE_MB}*(1<<20) ) + ${PARTITION_ALIGNMENT} - 1 )/${PARTITION_ALIGNMENT} * ${PARTITION_ALIGNMENT} ) + 2*${PARTITION_ALIGNMENT} )) "$@"; \
+        echo "  - Creating GPT partition table..."; \
+        parted --machine --script --align optimal "$@" mklabel gpt mkpart "${PARTITION_NAME}" fat16 "${PARTITION_ALIGNMENT}B" '100%' || (rm "$@" && exit 1); \
+        echo "  - Formatting partition as FAT16..."; \
+        mformat -i "$@"@@"${PARTITION_ALIGNMENT}" -t $$(( ( ( ( ${PARTITION_SIZE_MB}*(1<<20) ) + ${PARTITION_ALIGNMENT} - 1 )/${PARTITION_ALIGNMENT} * ${PARTITION_ALIGNMENT} ) >> 20 )) -h 64 -s 32 -v "${PARTITION_NAME}" || (rm "$@" && exit 1); \
+    fi
+	@echo "  Copying files to $@..."
+	@mcopy -voi "$@"@@"${PARTITION_ALIGNMENT}" $(patsubst %,"%",$?) :: 2>&1 | sed -e 's/^/  - /'
+
+${BUILD_DIR}/disk.gpt.fat32: PARTITION_SIZE_MB=32
+${BUILD_DIR}/disk.gpt.fat32: ${DISKFILES}
+	@mkdir -p "$(@D)"
+	@echo "Updating $@..."
+	@if [ ! -f "$@" ]; then \
+        echo "  Creating image $@..."; \
+        truncate -s $$(( ( ( ( ${PARTITION_SIZE_MB}*(1<<20) ) + ${PARTITION_ALIGNMENT} - 1 )/${PARTITION_ALIGNMENT} * ${PARTITION_ALIGNMENT} ) + 2*${PARTITION_ALIGNMENT} )) "$@"; \
+        echo "  - Creating GPT partition table..."; \
+        parted --machine --script --align optimal "$@" mklabel gpt mkpart "${PARTITION_NAME}" fat32 "${PARTITION_ALIGNMENT}B" '100%' || (rm "$@" && exit 1); \
+        echo "  - Formatting partition as FAT32..."; \
+        mformat -i "$@"@@"${PARTITION_ALIGNMENT}" -t $$(( ( ( ( ${PARTITION_SIZE_MB}*(1<<20) ) + ${PARTITION_ALIGNMENT} - 1 )/${PARTITION_ALIGNMENT} * ${PARTITION_ALIGNMENT} ) >> 20 )) -h 64 -s 32 -v "${PARTITION_NAME}" -F || (rm "$@" && exit 1); \
+    fi
+	@echo "  Copying files to $@..."
+	@mcopy -voi "$@"@@"${PARTITION_ALIGNMENT}" $(patsubst %,"%",$?) :: 2>&1 | sed -e 's/^/  - /'

@@ -4,6 +4,8 @@
 #include <devices/device_tree.h>
 #include <devices/plic.h>
 #include <devices/uart.h>
+#include <devices/virtio.h>
+#include <devices/pci.h>
 #include <harts.h>
 #include <kernel.h>
 #include <memory/slab_allocator.h>
@@ -12,6 +14,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <color.h>
+
+#ifdef DEVICE_TREE_DEBUG
+#define DT_DBG(...) KDBG(ANSI_MAGENTA "[DEVICE-TREE] " __VA_ARGS__)
+#else
+#define DT_DBG(...)
+#endif
 
 #define MAX_NODE_NAME_LENGTH 1000
 
@@ -212,7 +220,10 @@ struct compatible_device {
 } const compatible_devices[] = {
     {.compatible="riscv,plic0", .initializer=plic_init, .priority=2},
     {.compatible="ns16550a", .initializer=uart_init, .priority=1},
+    {.compatible="virtio,mmio", .initializer=probe_virtio_device, .priority=1},
+    {.compatible="pci-host-ecam-generic", .initializer=probe_pci, .priority=1},
 };
+
 #define NUM_COMPAT_DEVICES (sizeof(compatible_devices) / sizeof(struct compatible_device))
 
 struct device_node {
@@ -234,20 +245,28 @@ void check_compat(const const_string node_name, const fdt_prop *prop, struct dev
         const char * c = node_name.head;
         while (*++c != '@' && *c != '\0' && c != node_name.tail);
         if (*c != '\0' && c != node_name.tail) {
-            struct device_node *node = slab_malloc(struct device_node); //(struct device_node*)slab_alloc(&root_slab16);
-            node->next = NULL;
+            struct device_node *node = slab_malloc(struct device_node);
             node->compatible = compatible;
             node->address = strtoul((const_string){.head = c + 1, .tail = node_name.tail}, 16);
-            if (*head == NULL)
+            DT_DBG("Adding device %s (%S), priority %hhu, to chain...\n", node_name, compatible->compatible, compatible->priority);
+            if (*head == NULL) {
+                DT_DBG("\tNo head, setting as head.\n");
                 *head = node;
-            else if ((*head)->compatible->priority <= compatible->priority) {
+                node->next = NULL;
+            } else if ((*head)->compatible->priority <= compatible->priority) {
+                DT_DBG("\tHead priority was %hhu, but we're %hhu, so we're now the head.\n", (*head)->compatible->priority, compatible->priority);
                 node->next = *head;
                 *head = node;
             } else {
+                DT_DBG("\tWe're a lower priority than head (%hhu), so we're searching for an entry point...\n", (*head)->compatible->priority);
                 struct device_node *c = *head;
-                while (c->next != NULL && c->next->compatible->priority <= compatible->priority)
+                size_t no = 1;
+                while (c->next != NULL && c->next->compatible->priority > compatible->priority) {
+                    DT_DBG("\t\tEntry #%zu priority was %hhu (> ours, %hhu), moving along...\n", ++no, c->next->compatible->priority, compatible->priority);
                     c = c->next;
-                node->next = c->next->next;
+                }
+                DT_DBG("\t\tEntry #%zu priority is %hhu (<= than ours), so we're inserting before it.\n", no + 1, c->next->compatible->priority);
+                node->next = c->next;
                 c->next = node;
             }
         }
@@ -338,7 +357,7 @@ void device_tree_init(const fdt_header *fdt) {
     if (head != NULL) {
         struct device_node *c = head;
         do {
-            kprintf("Found compatible device %S\n", c->compatible->compatible);
+            DT_DBG("Found compatible device `%S` at %p\n", c->compatible->compatible, c->address);
             c->compatible->initializer(c->address);
             struct device_node *next = c->next;
             slab_free(&root_slab16, c);
@@ -379,3 +398,5 @@ void inspect_device_tree(const fdt_header *fdt) {
     putchar('\n');
     // flush();
 }
+
+#undef DT_DBG

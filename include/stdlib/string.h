@@ -32,4 +32,5 @@ extern inline int strncmp(const char *lhs, const char *rhs, size_t count);
 extern inline string strcpy(string s1, const_string s2);
 // extern inline char *strncpy(char *restrict s1, const char *restrict s2, size_t n);
 extern inline char *strncpy_s(char *restrict s1, rsize_t s1max, const char *restrict s2, size_t n);
+extern inline char *strchr(const const_string str, int c);
 extern inline const_string strstr(const const_string s1, const const_string s2);

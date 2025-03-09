@@ -1,4 +1,5 @@
 
+#include <io.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,7 +22,6 @@
 #include <common.h>
 
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
-extern struct file files[FILES_MAX];
 extern struct process procs[PROCS_MAX];
 
 const_string bootargs = CSTR("");
@@ -320,8 +320,6 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
            " \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n"
            "  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
 
-    probe_pci(0x30000000);
-
     if (kernel_verbose) {
         inspect_device_tree(fdt);
         sbiret value = sbi_call(SBI_BASE_FN_GET_SPEC_VERSION, 0, 0, 0, 0, 0, 0, SBI_EXT_BASE);
@@ -358,42 +356,55 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     hl->idle_proc = create_process(NULL, 0);
     set_current_proc(hl->idle_proc);
 
+    struct block_device *chain = block_device_chain_head;
+    while (chain != NULL) {
+        // kprintf(ANSI_GREEN "Virtio device at %p: %u\n", chain->base, chain->device_type);
+        fs_init(chain);
+        chain = (struct block_device*)chain->super.next;
+    }
+
+    // virtio_blk_init(0x10001000);
+    // fs_init(0x10001000);
+
+    // virtio_blk_init(0x10002000);
+    // fs_init(0x10002000);
+
+    // virtio_blk_init(0x10003000);
+    // fs_init(0x10003000);
+
+    // virtio_blk_init(0x10004000);
+    // fs_init(0x10004000);
+
     if (strstr(bootargs, CSTR("noinit")).head == NULL) {
-        virtio_blk_init();
-        fs_init();
         struct file *file = fs_lookup("shell.cpp.elf");
         if (file == NULL) PANIC("Could not find `init.elf`!\n");
         kprintf("File is %p\n", file);
         // if (inspect_elf((paddr_t)file->data)) {
-        process *proc = create_process_elf((elf32_header*)file->data);
-        kprintf("Starting process %hd...\n\n", proc->pid);
-        yield();
-        kprintf("Returned from init.\n");
+        //     process *proc = create_process_elf((elf32_header*)file->data);
+        //     kprintf("Starting process %hd...\n\n", proc->pid);
+        //     yield();
+        //     kprintf("Returned from init.\n");
         // }
-        // process *proc = create_process(file->data, file->size);
-
-        // kprintf("Starting process %hd...\n\n", proc->pid);
-        // yield();
-        // kprintf("Returned from init.\n");
     } else {
         kprintf("Kernel was passed `noinit`, not initializing user-space.\n");
-        while(true) {
-            int c = getchar();
-            if (c == -1) {
-                yield();
-                WAIT_FOR_INTERRUPT();
-                continue;
-            }
-            putchar(c);
-        }
+        // while(true) {
+        //     int c = getchar();
+        //     if (c == -1) {
+        //         yield();
+        //         WAIT_FOR_INTERRUPT();
+        //         continue;
+        //     }
+        //     putchar(c);
+        // }
     }
 
-    if (kernel_verbose) {
+    // if (kernel_verbose) {
         slab_dbg(&root_slab4);
         slab_dbg(&root_slab8);
         slab_dbg(&root_slab16);
         slab_dbg(&root_slab32);
-    }
+        slab_dbg(&root_slab64);
+    // }
 
 #endif
 
@@ -437,7 +448,7 @@ void handle_syscall(struct trap_frame *f) {
     case SYS_READFILE:
     case SYS_WRITEFILE: {
         const char *filename = (const char *)f->a0;
-        char *buf = (char *)f->a1;
+        // char *buf = (char *)f->a1;
         int len = f->a2;
         struct file *file = fs_lookup(filename);
         if (!file) {
@@ -446,16 +457,18 @@ void handle_syscall(struct trap_frame *f) {
             break;
         }
 
-        if (len > (int)sizeof(file->data))
-            len = file->size;
+        PANIC("TODO\n");
+        // if (len > (int)sizeof(file->data))
+        //     len = file->size;
 
-        if (f->a3 == SYS_WRITEFILE) {
-            memcpy_s(file->data, sizeof file->data, buf, len);
-            file->size = len;
-            fs_flush();
-        } else {
-            memcpy(buf, file->data, len); // NOLINT
-        }
+        // if (f->a3 == SYS_WRITEFILE) {
+        //     memcpy_s(file->data, sizeof file->data, buf, len);
+        //     file->size = len;
+        //     if (virtio_device_chain_head == NULL) PANIC("No virtio devices!\n");
+        //     fs_flush((struct virtio_blk_device*)virtio_device_chain_head);
+        // } else {
+        //     memcpy(buf, file->data, len); // NOLINT
+        // }
 
         f->a0 = len;
         break;
