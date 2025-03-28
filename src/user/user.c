@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <user.h>
 
-
 extern char __stack_top[];
 
 _Noreturn void abort(void) {

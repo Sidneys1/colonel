@@ -8,25 +8,25 @@
 bool inspect_elf(paddr_t data)
 #endif
 
-#define PROCS_MAX     8 // Maximum number of processes
+#define PROCS_MAX 8 // Maximum number of processes
 
 #define PAGES_PER_STACK 2
-#define STACK_SIZE 8192
+#define STACK_SIZE      8192
 
-typedef struct process {
-    short pid;              // Process ID
+    typedef struct process {
+    short pid; // Process ID
     // long core;            // Hart ID
     // void *sleep_on;
     // struct spinlock lock;
-    vaddr_t sp;           // Stack pointer
-    uint32_t *page_table; // Page table
-    uint8_t (*stack)[STACK_SIZE];  // Kernel stack
+    vaddr_t sp;                   // Stack pointer
+    uint32_t *page_table;         // Page table
+    uint8_t (*stack)[STACK_SIZE]; // Kernel stack
     enum STATE : uint8_t {
         PROC_UNUSED,
         PROC_RUNNING,
         PROC_WAITING,
         PROC_EXITED
-    } state;            // Process state
+    } state; // Process state
 } process;
 
 typedef struct __attribute__((__packed__)) elf_header {
@@ -43,7 +43,8 @@ typedef struct __attribute__((__packed__)) elf_header {
 typedef struct __attribute__((__packed__)) elf32_header {
     elf_header elf;
     uint32_t entrypoint, program_table_offset, section_table_offset, flags;
-    uint16_t header_size, program_table_entry_size, program_table_count, section_table_entry_size, section_table_count, section_header_string_table_index;
+    uint16_t header_size, program_table_entry_size, program_table_count, section_table_entry_size, section_table_count,
+        section_header_string_table_index;
 } elf32_header;
 
 typedef struct __attribute__((__packed__)) elf32_program_header {

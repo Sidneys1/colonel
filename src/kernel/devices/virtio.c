@@ -1,19 +1,23 @@
-#include <stddef.h>
 #include <color.h>
+#include <devices/virtio.h>
+#include <drivers/filesystems/fat.h>
+#include <drivers/filesystems/ustar.h>
 #include <io.h>
 #include <kernel.h>
-#include <devices/virtio.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <drivers/filesystems/ustar.h>
-#include <drivers/filesystems/fat.h>
 
-static inline uint32_t virtio_reg_read32(paddr_t base, unsigned offset) { return *((volatile uint32_t *)(base + offset)); }
+static inline uint32_t virtio_reg_read32(paddr_t base, unsigned offset) {
+    return *((volatile uint32_t *)(base + offset));
+}
 
-static inline uint64_t virtio_reg_read64(paddr_t base, unsigned offset) { return *((volatile uint64_t *)(base + offset)); }
+static inline uint64_t virtio_reg_read64(paddr_t base, unsigned offset) {
+    return *((volatile uint64_t *)(base + offset));
+}
 
 static inline void virtio_reg_write32(paddr_t base, unsigned offset, uint32_t value) {
     *((volatile uint32_t *)(base + offset)) = value;
@@ -23,63 +27,107 @@ static inline void virtio_reg_fetch_and_or32(paddr_t base, unsigned offset, uint
     virtio_reg_write32(base, offset, virtio_reg_read32(base, offset) | value);
 }
 
-
-
 void probe_virtio_device(paddr_t base) {
-    if (*((volatile uint32_t*)(base + VIRTIO_REG_MAGIC)) != 0x74726976) {
+    if (*((volatile uint32_t *)(base + VIRTIO_REG_MAGIC)) != 0x74726976) {
         kprintf(ANSI_RED "Given address (%p) was not a virtio device!\n", base);
         return;
     }
 
-    uint32_t reg_version = *((volatile uint32_t*)(base + VIRTIO_REG_VERSION));
+    uint32_t reg_version = *((volatile uint32_t *)(base + VIRTIO_REG_VERSION));
     if (reg_version != 0x1) {
         kprintf(ANSI_RED "Virtio device version (%#010x) unsupported.\n", reg_version);
         return;
     }
 
-    uint32_t device_id = *((volatile uint32_t*)(base + VIRTIO_REG_DEVICE_ID));
+    uint32_t device_id = *((volatile uint32_t *)(base + VIRTIO_REG_DEVICE_ID));
 
     switch (device_id) {
-        case 0: return;
-        case VIRTIO_DEVICE_BLOCK:
+    case 0:
+        return;
+    case VIRTIO_DEVICE_BLOCK:
         kprintf("Found virtio block device.\n");
-            add_block_device(SUPER(*virtio_blk_init(base)));
+        add_block_device(SUPER(*virtio_blk_init(base)));
+        break;
+    default: {
+        const_string did_name;
+        switch (device_id) {
+        case VIRTIO_DEVICE_NETWORK_CARD:
+            did_name = CSTR("network card");
             break;
-        default: {
-            const_string did_name;
-            switch (device_id) {
-            case VIRTIO_DEVICE_NETWORK_CARD: did_name = CSTR("network card"); break;
-            case VIRTIO_DEVICE_CONSOLE: did_name = CSTR("console"); break;
-            case VIRTIO_DEVICE_ENTROPY_SOURCE: did_name = CSTR("entropy source"); break;
-            case VIRTIO_DEVICE_MEMORY_BALLOONING_TRADITIONAL: did_name = CSTR("memory ballooning (traditional)"); break;
-            case VIRTIO_DEVICE_IOMEMORY: did_name = CSTR("ioMemory"); break;
-            case VIRTIO_DEVICE_RPMSG: did_name = CSTR("rpmsg"); break;
-            case VIRTIO_DEVICE_SCSI_HOST: did_name = CSTR("SCSI host"); break;
-            case VIRTIO_DEVICE_9P_TRANSPORT: did_name = CSTR("9P transport"); break;
-            case VIRTIO_DEVICE_MAC80211_WLAN: did_name = CSTR("mac80211 wlan"); break;
-            case VIRTIO_DEVICE_RPROC_SERIAL: did_name = CSTR("rproc serial"); break;
-            case VIRTIO_DEVICE_VIRTIO_CAIF: did_name = CSTR("virtio CAIF"); break;
-            case VIRTIO_DEVICE_MEMORY_BALLOON: did_name = CSTR("memory balloon"); break;
-            case VIRTIO_DEVICE_GPU_DEVICE: did_name = CSTR("GPU device"); break;
-            case VIRTIO_DEVICE_TIMER_CLOCK: did_name = CSTR("Timer/Clock device"); break;
-            case VIRTIO_DEVICE_INPUT: did_name = CSTR("Input device"); break;
-            case VIRTIO_DEVICE_SOCKET: did_name = CSTR("Socket device"); break;
-            case VIRTIO_DEVICE_CRYPTO: did_name = CSTR("Crypto device"); break;
-            case VIRTIO_DEVICE_SIGNAL_DISTRIBUTION_MODULE: did_name = CSTR("Signal Distribution Module"); break;
-            case VIRTIO_DEVICE_PSTORE: did_name = CSTR("pstore device"); break;
-            case VIRTIO_DEVICE_IOMMU: did_name = CSTR("IOMMU device"); break;
-            case VIRTIO_DEVICE_MEMORY: did_name = CSTR("Memory device "); break;
-            default: did_name = CSTR("unknown"); break;
-            }
-            kprintf("Virtio device-type %u (%s) not supported.\n", device_id, did_name);
-        } return;
+        case VIRTIO_DEVICE_CONSOLE:
+            did_name = CSTR("console");
+            break;
+        case VIRTIO_DEVICE_ENTROPY_SOURCE:
+            did_name = CSTR("entropy source");
+            break;
+        case VIRTIO_DEVICE_MEMORY_BALLOONING_TRADITIONAL:
+            did_name = CSTR("memory ballooning (traditional)");
+            break;
+        case VIRTIO_DEVICE_IOMEMORY:
+            did_name = CSTR("ioMemory");
+            break;
+        case VIRTIO_DEVICE_RPMSG:
+            did_name = CSTR("rpmsg");
+            break;
+        case VIRTIO_DEVICE_SCSI_HOST:
+            did_name = CSTR("SCSI host");
+            break;
+        case VIRTIO_DEVICE_9P_TRANSPORT:
+            did_name = CSTR("9P transport");
+            break;
+        case VIRTIO_DEVICE_MAC80211_WLAN:
+            did_name = CSTR("mac80211 wlan");
+            break;
+        case VIRTIO_DEVICE_RPROC_SERIAL:
+            did_name = CSTR("rproc serial");
+            break;
+        case VIRTIO_DEVICE_VIRTIO_CAIF:
+            did_name = CSTR("virtio CAIF");
+            break;
+        case VIRTIO_DEVICE_MEMORY_BALLOON:
+            did_name = CSTR("memory balloon");
+            break;
+        case VIRTIO_DEVICE_GPU_DEVICE:
+            did_name = CSTR("GPU device");
+            break;
+        case VIRTIO_DEVICE_TIMER_CLOCK:
+            did_name = CSTR("Timer/Clock device");
+            break;
+        case VIRTIO_DEVICE_INPUT:
+            did_name = CSTR("Input device");
+            break;
+        case VIRTIO_DEVICE_SOCKET:
+            did_name = CSTR("Socket device");
+            break;
+        case VIRTIO_DEVICE_CRYPTO:
+            did_name = CSTR("Crypto device");
+            break;
+        case VIRTIO_DEVICE_SIGNAL_DISTRIBUTION_MODULE:
+            did_name = CSTR("Signal Distribution Module");
+            break;
+        case VIRTIO_DEVICE_PSTORE:
+            did_name = CSTR("pstore device");
+            break;
+        case VIRTIO_DEVICE_IOMMU:
+            did_name = CSTR("IOMMU device");
+            break;
+        case VIRTIO_DEVICE_MEMORY:
+            did_name = CSTR("Memory device ");
+            break;
+        default:
+            did_name = CSTR("unknown");
+            break;
+        }
+        kprintf("Virtio device-type %u (%s) not supported.\n", device_id, did_name);
+    }
+        return;
     }
 }
 
 struct virtio_virtq *virtq_init(paddr_t base, unsigned index) {
     // Allocate a region for the virtqueue.
     paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
-    struct virtio_virtq *vq = (struct virtio_virtq*)virtq_paddr; //slab_malloc(struct virtio_virtq);
+    struct virtio_virtq *vq = (struct virtio_virtq *)virtq_paddr; // slab_malloc(struct virtio_virtq);
     vq->queue_index = index;
     vq->used_index = (volatile uint16_t *)&vq->used.index;
 
@@ -101,7 +149,7 @@ struct virtio_virtq *virtq_init(paddr_t base, unsigned index) {
 size_t virtio_read_block(const struct block_device *dev, void *restrict tgt, size_t sector, size_t count) {
     // IS_SUBCLASS(*dev, struct virtio_blk_device);
     for (size_t i = 0; i < count; i++)
-        read_write_disk((struct virtio_blk_device*)dev, tgt + i * SECTOR_SIZE, sector + i, 0);
+        read_write_disk((struct virtio_blk_device *)dev, tgt + i * SECTOR_SIZE, sector + i, 0);
     return count;
 }
 
@@ -112,7 +160,7 @@ struct virtio_blk_device *virtio_blk_init(paddr_t base) {
     device->virtio.base_addr = base;
     device->virtio.device_type = VIRTIO_DEVICE_BLOCK;
 
-    char (*buffer)[16] = (char(*)[16])slab_malloc(struct{char _[16];});
+    char (*buffer)[16] = (char (*)[16])slab_malloc(struct { char _[16]; });
     snprintf(*buffer, 16, "virtio@%08x", base);
     device->super.id = *buffer;
 
@@ -136,7 +184,8 @@ struct virtio_blk_device *virtio_blk_init(paddr_t base) {
     kprintf("virtio-blk: capacity is %d bytes\n", device->sector_count * SECTOR_SIZE);
 
     // Allocate a region to store requests to the device.
-    device->requests = (struct virtio_blk_req *)alloc_pages(align_up(sizeof(struct virtio_blk_req), PAGE_SIZE) / PAGE_SIZE);
+    device->requests =
+        (struct virtio_blk_req *)alloc_pages(align_up(sizeof(struct virtio_blk_req), PAGE_SIZE) / PAGE_SIZE);
 
     return device;
 }

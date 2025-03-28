@@ -1,21 +1,18 @@
 #include <common.h>
+#include <console.h>
+#include <devices/uart.h>
 #include <harts.h>
 #include <kernel.h>
 #include <memory/page_allocator.h>
+#include <memory/slab_allocator.h>
 #include <process.h>
 #include <sbi/sbi.h>
 #include <spinlock.h>
 #include <stdio.h>
-#include <devices/uart.h>
-#include <console.h>
-#include <memory/slab_allocator.h>
-#include <console.h>
 
 struct spinlock lock = {.name = "CONSOLE", .hart = 0, .locked = 0};
 
-void sbi_putc(char c) {
-    sbi_call(c, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
-}
+void sbi_putc(char c) { sbi_call(c, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */); }
 
 int sbi_getc() {
     // printf("sbi getc\n");
@@ -26,7 +23,7 @@ int sbi_getc() {
     // return ret;
 }
 
-struct io_config_t kernel_io_config = {.putc = &sbi_putc, .getc = &sbi_getc };
+struct io_config_t kernel_io_config = {.putc = &sbi_putc, .getc = &sbi_getc};
 
 int getchar(void) {
     acquire(&lock);
@@ -64,7 +61,8 @@ void s_flush(struct stream *stream) {
 void s_putchar(struct stream *stream, char ch) {
     if (stream->buffer != NULL) {
         stream->buffer[stream->buffer_w++ % PAGE_SIZE] = ch;
-        if (stream->direction == STREAM_OUT && (stream->buffer_w == (stream->buffer_r + PAGE_SIZE) || (stream->auto_flush && ch == '\n')))
+        if (stream->direction == STREAM_OUT &&
+            (stream->buffer_w == (stream->buffer_r + PAGE_SIZE) || (stream->auto_flush && ch == '\n')))
             s_flush(stream);
         return;
     }
@@ -92,8 +90,14 @@ void putchar(char ch) {
     //     // flush();
     // }
 }
-struct stream stdout = {.direction = STREAM_OUT,  /*.no = 0,*/ .target = NULL, .lock={.locked=0, .name="STDOUT", .hart=0}, .buffer = NULL},
-stdin = {.direction = STREAM_IN, .target = NULL, .lock={.locked=0, .name="STDIN", .hart=0}, .buffer=NULL};
+struct stream stdout = {.direction = STREAM_OUT,
+                        /*.no = 0,*/ .target = NULL,
+                        .lock = {.locked = 0, .name = "STDOUT", .hart = 0},
+                        .buffer = NULL},
+              stdin = {.direction = STREAM_IN,
+                       .target = NULL,
+                       .lock = {.locked = 0, .name = "STDIN", .hart = 0},
+                       .buffer = NULL};
 
 // Flush console stdout
 void flush(void) {
@@ -117,8 +121,8 @@ void flush(void) {
 void init_streams(void) {
     // create_slab(&streams);
 
-    stdout.buffer = (char*)alloc_pages(1);
-    stdin.buffer = (char*)alloc_pages(1);
+    stdout.buffer = (char *)alloc_pages(1);
+    stdin.buffer = (char *)alloc_pages(1);
 }
 
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush) {
@@ -128,11 +132,11 @@ struct stream *create_stream(enum StreamDirection dir, struct stream *target, bo
     // stream->no = ++streamno;
     stream->direction = dir;
     stream->auto_flush = auto_flush;
-    stream->lock = (struct spinlock){.locked=0, .name=NULL, .hart=0};
+    stream->lock = (struct spinlock){.locked = 0, .name = NULL, .hart = 0};
 
     if (buffered) {
         // TODO: buffers don't need to be 4k each...
-        stream->buffer = (char*)alloc_pages(1);
+        stream->buffer = (char *)alloc_pages(1);
     } else {
         stream->buffer = NULL;
     }

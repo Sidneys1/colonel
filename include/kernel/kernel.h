@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <console.h>
 #include <color.h>
+#include <console.h>
 
 #define PAGE_SIZE 4096
 
@@ -53,20 +53,26 @@ struct trap_frame {
         __tmp;                                                                                                         \
     })
 
-#define kprintf_c(fmt, color, ...)                                                                                              \
+#define kprintf_c(fmt, color, ...)                                                                                     \
     do {                                                                                                               \
-        /*void (*b)(char) = kernel_io_config.putc;\
-        kernel_io_config.putc = sbi_putc;*/\
+        /*void (*b)(char) = kernel_io_config.putc;                                                                     \
+        kernel_io_config.putc = sbi_putc;*/                                                                            \
         uint32_t time = READ_CSR(time);                                                                                \
-        printf(color "[kernel %3d.%03d] " fmt ANSI_RESET, time / 10000000,                                            \
+        printf(color "[kernel %3d.%03d] " fmt ANSI_RESET, time / 10000000,                                             \
                (time % 10000000) / 10000 __VA_OPT__(, ) __VA_ARGS__);                                                  \
-        /*kernel_io_config.putc = b;*/\
+        /*kernel_io_config.putc = b;*/                                                                                 \
     } while (0)
 
 #define kprintf(fmt, ...) kprintf_c(fmt, ANSI_GREY __VA_OPT__(, ) __VA_ARGS__)
 
 #ifdef DEBUG
-#define KDBG(...) kprintf(__VA_ARGS__)
+#define kdbg_printf_c(topic, fmt, color, ...)                                                                          \
+    do {                                                                                                               \
+        uint32_t time = READ_CSR(time);                                                                                \
+        printf(color "[%S %3d.%03d] " fmt ANSI_RESET, topic, time / 10000000,                                          \
+               (time % 10000000) / 10000 __VA_OPT__(, ) __VA_ARGS__);                                                  \
+    } while (0)
+#define KDBG(topic, fmt, ...) kdbg_printf_c(topic, fmt, ANSI_MAGENTA __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define KDBG(...)
 #endif
@@ -79,9 +85,9 @@ struct trap_frame {
 
 #define PANIC(fmt, ...)                                                                                                \
     do {                                                                                                               \
-    WRITE_CSR(sie, 0);\
-    kernel_io_config.putc = &sbi_putc;\
-    kernel_io_config.getc = &sbi_getc;\
+        WRITE_CSR(sie, 0);                                                                                             \
+        kernel_io_config.putc = &sbi_putc;                                                                             \
+        kernel_io_config.getc = &sbi_getc;                                                                             \
         kprintf("PANIC: %S:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);                                         \
         while (1) {                                                                                                    \
         }                                                                                                              \

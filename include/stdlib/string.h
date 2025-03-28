@@ -8,13 +8,13 @@
     (const_string) { .head = x, .tail = x + sizeof x } // NOLINT
 
 typedef struct string {
-    char * head;
-    char * tail;
+    char *head;
+    char *tail;
 } string;
 
 typedef struct const_string {
-    const char * head;
-    const char * tail;
+    const char *head;
+    const char *tail;
 } const_string;
 
 extern inline void *memset(void *buf, char c, size_t n);

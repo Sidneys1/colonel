@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <kernel.h>
 #include <console.h>
 #include <devices/device_tree.h>
 #include <devices/pci.h>
@@ -12,14 +11,16 @@
 #include <devices/uart.h>
 #include <devices/virtio.h>
 #include <harts.h>
-#include <memory_mgmt.h>
+#include <kernel.h>
 #include <memory/page_allocator.h>
 #include <memory/slab_allocator.h>
+#include <memory_mgmt.h>
 #include <process.h>
 #include <sbi/sbi.h>
 #include <spinlock.h>
 
 #include <common.h>
+#include <crc32.h>
 
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
 extern struct process procs[PROCS_MAX];
@@ -202,7 +203,7 @@ volatile bool is_shutting_down = false;
 #define SSTATUS_ENABLE_SIE 0x02
 
 #define SIE_EXTERNAL 0x200
-#define SIE_TIMERS 0x20
+#define SIE_TIMERS   0x20
 
 void kernel_shutdown(uint32_t hartid) {
     // kernel_io_config.putc = &sbi_putc;
@@ -227,7 +228,7 @@ void kernel_shutdown(uint32_t hartid) {
         if (still_running) {
             sbiret value = sbi_call(still_running, 0, 0, 0, 0, 0, SBI_IPI_FN_SEND_IPI, SBI_EXT_IPI);
             kprintf_c("[SHUTDOWN] sbi_send_ipi(0x%x)\tvalue=0x%x\terror=%d\n", ANSI_ORANGE, still_running, value.value,
-            value.error);
+                      value.error);
             if (value.error)
                 PANIC("OOPS: %d!\n", value.error);
 
@@ -250,8 +251,7 @@ void kernel_shutdown(uint32_t hartid) {
 }
 uint32_t boot_hart_id;
 
-__attribute__((used))
-void secondary_main(uint32_t hartid) {
+__attribute__((used)) void secondary_main(uint32_t hartid) {
     WRITE_CSR(stvec, (uint32_t)kernel_entry);
     heart_locals[hartid].hartid = hartid;
     heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
@@ -273,7 +273,7 @@ void secondary_main(uint32_t hartid) {
     while (!is_shutting_down) {
         uint32_t time = READ_CSR(time);
         kprintf_c("[Hart #%ld] CPU uptime: %d ticks. (%d.%ds)\n", ANSI_CYAN, hartid, time, time / CLOCK_FREQ,
-                (time % CLOCK_FREQ) / (CLOCK_FREQ / 1000));
+                  (time % CLOCK_FREQ) / (CLOCK_FREQ / 1000));
         // sbi_call(future, 0, 0, 0, 0, 0, SBI_TIME_FN_SET_TIMER, SBI_EXT_TIME);
         // uint32_t sie = READ_CSR(sie);
         // printf("Disabling external interrupts (%#08x -> %#08x)\n", sie, sie&~SIE_EXTERNAL);
@@ -307,7 +307,7 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     heart_locals[hartid].stdout = create_stream(STREAM_OUT, &stdout, true, true);
 
     WRITE_CSR(sstatus, READ_CSR(sstatus) | SSTATUS_ENABLE_SIE);
-    WRITE_CSR(sie, READ_CSR(sie)|SIE_EXTERNAL|SIE_TIMERS);
+    WRITE_CSR(sie, READ_CSR(sie) | SIE_EXTERNAL | SIE_TIMERS);
 
 #ifdef TESTS
     slab_test_suite();
@@ -360,50 +360,77 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     while (chain != NULL) {
         // kprintf(ANSI_GREEN "Virtio device at %p: %u\n", chain->base, chain->device_type);
         fs_init(chain);
-        chain = (struct block_device*)chain->super.next;
+        chain = (struct block_device *)chain->super.next;
     }
 
-    // virtio_blk_init(0x10001000);
-    // fs_init(0x10001000);
-
-    // virtio_blk_init(0x10002000);
-    // fs_init(0x10002000);
-
-    // virtio_blk_init(0x10003000);
-    // fs_init(0x10003000);
-
-    // virtio_blk_init(0x10004000);
-    // fs_init(0x10004000);
+    for (struct fs_entry *c = files_head; c != NULL; c = c->next) {
+        switch (c->type) {
+        case FS_ENTRY_DIR: {
+            kprintf("directory: %S\n", c->name);
+        } break;
+        case FS_ENTRY_FILE: {
+            kprintf("file: %S, size=%d\n", c->name, SUB(struct file, *c)->size);
+        } break;
+        }
+    }
 
     if (strstr(bootargs, CSTR("noinit")).head == NULL) {
-        struct file *file = fs_lookup("shell.cpp.elf");
-        if (file == NULL) PANIC("Could not find `init.elf`!\n");
-        kprintf("File is %p\n", file);
-        // if (inspect_elf((paddr_t)file->data)) {
-        //     process *proc = create_process_elf((elf32_header*)file->data);
-        //     kprintf("Starting process %hd...\n\n", proc->pid);
-        //     yield();
-        //     kprintf("Returned from init.\n");
-        // }
+        struct file *file = fs_lookup("fat0:/shell.cpp.elf");
+        if (file == NULL)
+            PANIC("Could not find `init.elf`!\n");
+        // kprintf("File is %p\n", file);
+        void *const pages = (void *)alloc_pages(file->size / PAGE_SIZE);
+        const size_t read = file->super.filesystem->read_file(file->super.filesystem, pages, file->super.name);
+        if (read == file->size) {
+            // if (inspect_elf((paddr_t)file->data)) {
+            process *proc = create_process_elf((elf32_header *)pages);
+            kprintf("Starting process %hd...\n\n", proc->pid);
+            yield();
+            kprintf("Returned from init.\n");
+            // }
+        } else {
+            kprintf(ANSI_RED "Only read %zu bytes of a seemingly %zu-byte file... Not launching `init.elf`!\n");
+        }
     } else {
         kprintf("Kernel was passed `noinit`, not initializing user-space.\n");
-        // while(true) {
-        //     int c = getchar();
-        //     if (c == -1) {
-        //         yield();
-        //         WAIT_FOR_INTERRUPT();
-        //         continue;
-        //     }
-        //     putchar(c);
-        // }
+
+        kprintf(ANSI_GREEN "Experiment time!\n");
+        const char *paths[] = {"ustar0:/init.elf", "fat0:/init.elf", "fat1:/init.elf", "fat2:/init.elf"};
+        size_t pages_size = 0;
+        void *pages = NULL;
+
+        for (size_t i = 0; i < (sizeof(paths) / sizeof(char *)); i++) {
+            struct file *file0 = fs_lookup(paths[i]);
+            if (file0 == NULL) {
+                printf(ANSI_RED "Could not find file `%S`.\n", paths[i]);
+                continue;
+            }
+            printf("Found file on a %S filesystem (`%S`)\n", file0->super.filesystem->type_name, *file0->super.name);
+            if ((file0->size / PAGE_SIZE) > pages_size)
+                pages = (void *)alloc_pages(file0->size / PAGE_SIZE);
+            const size_t read = file0->super.filesystem->read_file(file0->super.filesystem, pages, file0->super.name);
+            printf("Read %zu bytes of %zu-byte file. CRC32 checksum: 0x%08X. File magic: \"%S\".\n\n", read,
+                   file0->size, crc32buf(pages, read), (const char *)pages);
+        }
+
+        // struct file *file2 = fs_lookup("ustar0:/init.elf");
+        // printf("\nFound file: %p (`%S`)\n", file2, *file2->super.name);
+        // void *const pages2 = (void*)alloc_pages(file2->size / PAGE_SIZE);
+        // const size_t read2 = file2->super.filesystem->read_file(file2->super.filesystem, pages2, file2->super.name);
+        // printf("Read %zu bytes of %zu-byte file from USTAR. File magic: \"%S\"\n", read, file2->size, (const
+        // char*)pages2);
+
+        // uint32_t crc32_2 = crc32buf(pages2, read2);
+        // // Print the CRC value
+        // printf("CRC32 checksum: 0x%08X\n", crc32_2);
     }
 
     // if (kernel_verbose) {
-        slab_dbg(&root_slab4);
-        slab_dbg(&root_slab8);
-        slab_dbg(&root_slab16);
-        slab_dbg(&root_slab32);
-        slab_dbg(&root_slab64);
+    slab_dbg(&root_slab4);
+    slab_dbg(&root_slab8);
+    slab_dbg(&root_slab16);
+    slab_dbg(&root_slab32);
+    slab_dbg(&root_slab64);
     // }
 
 #endif
@@ -478,8 +505,7 @@ void handle_syscall(struct trap_frame *f) {
     }
 }
 
-__attribute__((used))
-void handle_trap(struct trap_frame *f) {
+__attribute__((used)) void handle_trap(struct trap_frame *f) {
     uint32_t user_pc = READ_CSR(sepc);
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
@@ -501,7 +527,7 @@ void handle_trap(struct trap_frame *f) {
             plic_interrupt();
             WRITE_CSR(sip, SIE_EXTERNAL);
             // printf("Exited plic interrupt...\n");
-        } else if(scause == 0x80000005) {
+        } else if (scause == 0x80000005) {
             // TODO: timer interrupt
             // user_pc += 4;
             // WRITE_CSR(sip, SIE_TIMERS);
@@ -514,34 +540,57 @@ void handle_trap(struct trap_frame *f) {
             WRITE_CSR(stimecmp, -1);
             // PANIC("timer pending: %#08x\n", READ_CSR(sip));
         } else {
-            const char* cause = "unknown";
+            const char *cause = "unknown";
             switch (scause & ~0x80000000) {
-            case 1: cause = "supervisor software interrupt"; break;
-            case 5: cause = "supervisor timer interrupt"; break;
-            case 9: cause = "supervisor external interrupt"; break;
-            default: break;
+            case 1:
+                cause = "supervisor software interrupt";
+                break;
+            case 5:
+                cause = "supervisor timer interrupt";
+                break;
+            case 9:
+                cause = "supervisor external interrupt";
+                break;
+            default:
+                break;
             }
-            PANIC("Unexpected interrupt! scause=%lx (%S) stval=%lx sepc=%lx\n", scause & ~0x80000000, cause, stval, user_pc);
+            PANIC("Unexpected interrupt! scause=%lx (%S) stval=%lx sepc=%lx\n", scause & ~0x80000000, cause, stval,
+                  user_pc);
         }
     } else if (scause == SCAUSE_ECALL) {
         handle_syscall(f);
         user_pc += 4;
     } else {
-        const char* cause = "unknown";
+        const char *cause = "unknown";
         switch (scause) {
-        case 0: cause = "instruction address misaligned"; break;
-        case 1: cause = "instruction access fault"; break;
-        case 2: cause = "illegal instruction"; break;
-        case 3: cause = "breakpoint"; break;
-        case 5: cause = "load access fault"; break;
-        case 6: cause = "AMO address misaligned"; break;
-        case 7: cause = "store/AMO access fault"; break;
-        default: break;
+        case 0:
+            cause = "instruction address misaligned";
+            break;
+        case 1:
+            cause = "instruction access fault";
+            break;
+        case 2:
+            cause = "illegal instruction";
+            break;
+        case 3:
+            cause = "breakpoint";
+            break;
+        case 5:
+            cause = "load access fault";
+            break;
+        case 6:
+            cause = "AMO address misaligned";
+            break;
+        case 7:
+            cause = "store/AMO access fault";
+            break;
+        default:
+            break;
         }
         PANIC("unexpected trap scause=%lx (%S), stval=%lx, sepc=%lx\n", scause, cause, stval, user_pc);
     }
 
-    // kprintf("Exiting trap handler (returning to 0x%p)...\n", user_pc);
+    // kprintf("Exiting trap handler (returning to %p)...\n", user_pc);
     // kernel_io_config.putc = restore_putc;
     // kernel_io_config.getc = restore_getc;
     WRITE_CSR(sepc, user_pc);
@@ -574,7 +623,7 @@ __attribute__((section(".text.boot"))) __attribute__((naked)) void boot(void) {
                          : "a6", "a7" // clobbers
     );
     __asm__ __volatile__("mv sp, %[stack_top]\n" // Set the stack pointer
-                        //  "csrw sscratch, sp\n"
+                                                 //  "csrw sscratch, sp\n"
                          "mv a0, a6\n"
                          "mv a1, a7\n"
                          "call kernel_main"             // Jump to kernel_main with restored a0 and a1

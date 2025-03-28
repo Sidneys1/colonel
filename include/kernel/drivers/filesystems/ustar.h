@@ -2,6 +2,14 @@
 
 #include <io.h>
 
+struct ustar_filesystem {
+    INHERITS(struct filesystem);
+};
+
+struct ustar_file {
+    INHERITS(struct file);
+};
+
 struct tar_header {
     char name[100];
     char mode[8];

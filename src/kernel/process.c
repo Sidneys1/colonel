@@ -1,4 +1,6 @@
 #include <common.h>
+#include <devices/plic.h>
+#include <devices/uart.h>
 #include <devices/virtio.h>
 #include <harts.h>
 #include <kernel.h>
@@ -10,26 +12,46 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include <devices/plic.h>
-#include <devices/uart.h>
 
 #ifdef PROCESS_DEBUG
-#define PROCESS_DBG(...) KDBG("[PROCESS-CORE] " __VA_ARGS__)
+#define PROCESS_DBG(...) KDBG("PROCESS-CORE", __VA_ARGS__)
 bool inspect_elf(paddr_t data) {
-    const elf_header *elf = (elf_header*)data;
+    const elf_header *elf = (elf_header *)data;
     const_string isa = CSTR("<unknown>");
-    switch(elf->isa) {
-        case 0x00: isa = CSTR("<generic>"); break;
-        case 0x02: isa = CSTR("SPARC"); break;
-        case 0x03: isa = CSTR("x86"); break;
-        case 0x08: isa = CSTR("MIPS"); break;
-        case 0x14: isa = CSTR("PowerPC"); break;
-        case 0x28: isa = CSTR("ARM"); break;
-        case 0x2a: isa = CSTR("SuperH"); break;
-        case 0x32: isa = CSTR("IA-64"); break;
-        case 0x3e: isa = CSTR("x86-64"); break;
-        case 0xb7: isa = CSTR("AARCH64"); break;
-        case 0xF3: isa = CSTR("RISC-V"); break;
+    switch (elf->isa) {
+    case 0x00:
+        isa = CSTR("<generic>");
+        break;
+    case 0x02:
+        isa = CSTR("SPARC");
+        break;
+    case 0x03:
+        isa = CSTR("x86");
+        break;
+    case 0x08:
+        isa = CSTR("MIPS");
+        break;
+    case 0x14:
+        isa = CSTR("PowerPC");
+        break;
+    case 0x28:
+        isa = CSTR("ARM");
+        break;
+    case 0x2a:
+        isa = CSTR("SuperH");
+        break;
+    case 0x32:
+        isa = CSTR("IA-64");
+        break;
+    case 0x3e:
+        isa = CSTR("x86-64");
+        break;
+    case 0xb7:
+        isa = CSTR("AARCH64");
+        break;
+    case 0xF3:
+        isa = CSTR("RISC-V");
+        break;
     }
     printf("Elf header:\n"
            "\tMagic: %#hhx\n"
@@ -41,25 +63,20 @@ bool inspect_elf(paddr_t data) {
            "\tType: %s (%#hx)\n"
            "\tISA: %s (%#hx)\n"
            "\tELF Version: %u\n",
-           elf->magic,
-           elf->elf,
-           elf->width == 1 ? CSTR("32") : CSTR("64"),
-           elf->endian ? CSTR("LE") : CSTR("BE"),
-           elf->header_version,
-           elf->abi,
-           elf->type == 1 ? CSTR("Relocateable") : (elf->type == 2 ? CSTR("Executable") : (elf->type == 3 ? CSTR("Shared") : (elf->type == 4 ? CSTR("Core") : CSTR("<unknown>")))),
-           elf->type,
-           isa,
-           elf->isa,
-           elf->elf_version
-    );
+           elf->magic, elf->elf, elf->width == 1 ? CSTR("32") : CSTR("64"), elf->endian ? CSTR("LE") : CSTR("BE"),
+           elf->header_version, elf->abi,
+           elf->type == 1 ? CSTR("Relocateable")
+                          : (elf->type == 2 ? CSTR("Executable")
+                                            : (elf->type == 3 ? CSTR("Shared")
+                                                              : (elf->type == 4 ? CSTR("Core") : CSTR("<unknown>")))),
+           elf->type, isa, elf->isa, elf->elf_version);
 
     if (elf->width != 1) {
         printf("Colonel is not 64-bit (yet!).\n");
         return false;
     }
 
-    const elf32_header *elf32 = (elf32_header*)data;
+    const elf32_header *elf32 = (elf32_header *)data;
 
     printf("\tEntrypoint: %#x\n"
            "\tProgram table offset: %u\n"
@@ -71,36 +88,45 @@ bool inspect_elf(paddr_t data) {
            "\tSection table entry size: %u\n"
            "\tSection table entry count: %u\n"
            "\tSection header string table index: %u\n",
-           elf32->entrypoint,
-           elf32->program_table_offset,
-           elf32->section_table_offset,
-           elf32->flags, elf32->flags,
-           elf32->header_size,
-           elf32->program_table_entry_size,
-           elf32->program_table_count,
-           elf32->section_table_entry_size,
-           elf32->section_table_count,
-           elf32->section_header_string_table_index
-    );
+           elf32->entrypoint, elf32->program_table_offset, elf32->section_table_offset, elf32->flags, elf32->flags,
+           elf32->header_size, elf32->program_table_entry_size, elf32->program_table_count,
+           elf32->section_table_entry_size, elf32->section_table_count, elf32->section_header_string_table_index);
 
-    elf32_program_header *program = (elf32_program_header*)(data + elf32->program_table_offset);
+    elf32_program_header *program = (elf32_program_header *)(data + elf32->program_table_offset);
     for (size_t i = 0; i < elf32->program_table_count; i++) {
         const_string type = CSTR("<invalid>");
         switch (program[i].segment_type) {
-            case 0: type = CSTR("Null"); break;
-            case 1: type = CSTR("Loadable"); break;
-            case 2: type = CSTR("Dynamic"); break;
-            case 3: type = CSTR("Interpreter"); break;
-            case 4: type = CSTR("Note"); break;
-            case 5: type = CSTR("Reserved"); break;
-            case 6: type = CSTR("Program header table"); break;
+        case 0:
+            type = CSTR("Null");
+            break;
+        case 1:
+            type = CSTR("Loadable");
+            break;
+        case 2:
+            type = CSTR("Dynamic");
+            break;
+        case 3:
+            type = CSTR("Interpreter");
+            break;
+        case 4:
+            type = CSTR("Note");
+            break;
+        case 5:
+            type = CSTR("Reserved");
+            break;
+        case 6:
+            type = CSTR("Program header table");
+            break;
         }
         if (program[i].segment_type >= 0x70000000 && program[i].segment_type <= 0x7fffffff)
             type = CSTR("Processor-specific semantics");
         char flags[3] = {'-', '-', '-'};
-        if (program[i].flags & 1) flags[2] = 'X';
-        if (program[i].flags & 2) flags[1] = 'W';
-        if (program[i].flags & 4) flags[0] = 'R';
+        if (program[i].flags & 1)
+            flags[2] = 'X';
+        if (program[i].flags & 2)
+            flags[1] = 'W';
+        if (program[i].flags & 4)
+            flags[0] = 'R';
         printf("\tProgram[%zu]:\n"
                "\t\tType: %s (%#x)\n"
                "\t\tOffset: %#x\n"
@@ -110,35 +136,52 @@ bool inspect_elf(paddr_t data) {
                "\t\tSize (in memory): %d\n"
                "\t\tFlags: %s (%#x, %#b)\n"
                "\t\tAlignment: %#x\n",
-               i,
-               type, program[i].segment_type,
-               program[i].p_offset,
-               program[i].p_vaddr,
-               program[i].p_paddr,
-               program[i].p_filesz,
-               program[i].p_memsz,
-               (const_string){.head=flags, .tail=&flags[3]}, program[i].flags, program[i].flags,
-               program[i].alignment
-        );
+               i, type, program[i].segment_type, program[i].p_offset, program[i].p_vaddr, program[i].p_paddr,
+               program[i].p_filesz, program[i].p_memsz, (const_string){.head = flags, .tail = &flags[3]},
+               program[i].flags, program[i].flags, program[i].alignment);
     }
 
-    elf32_section_header *section = (elf32_section_header*)(data + elf32->section_table_offset);
-    char *strings = (char*)(data + section[elf32->section_header_string_table_index].offset);
+    elf32_section_header *section = (elf32_section_header *)(data + elf32->section_table_offset);
+    char *strings = (char *)(data + section[elf32->section_header_string_table_index].offset);
     for (size_t i = 0; i < elf32->section_table_count; i++) {
         const_string type = CSTR("<invalid>");
         switch (section[i].type) {
-            case 0: type = CSTR("<inactive>"); break;
-            case 1: type = CSTR("Program bits"); break;
-            case 2: type = CSTR("Symbol table"); break;
-            case 3: type = CSTR("String table"); break;
-            case 4: type = CSTR("Relocation entries (RELA)"); break;
-            case 5: type = CSTR("Symbol hash table"); break;
-            case 6: type = CSTR("Dynamic linking info"); break;
-            case 7: type = CSTR("Note"); break;
-            case 8: type = CSTR("No bits"); break;
-            case 9: type = CSTR("Relocation entries (REL)"); break;
-            case 10: type = CSTR("<reserved>"); break;
-            case 11: type = CSTR("Dynamic linking symbol table"); break;
+        case 0:
+            type = CSTR("<inactive>");
+            break;
+        case 1:
+            type = CSTR("Program bits");
+            break;
+        case 2:
+            type = CSTR("Symbol table");
+            break;
+        case 3:
+            type = CSTR("String table");
+            break;
+        case 4:
+            type = CSTR("Relocation entries (RELA)");
+            break;
+        case 5:
+            type = CSTR("Symbol hash table");
+            break;
+        case 6:
+            type = CSTR("Dynamic linking info");
+            break;
+        case 7:
+            type = CSTR("Note");
+            break;
+        case 8:
+            type = CSTR("No bits");
+            break;
+        case 9:
+            type = CSTR("Relocation entries (REL)");
+            break;
+        case 10:
+            type = CSTR("<reserved>");
+            break;
+        case 11:
+            type = CSTR("Dynamic linking symbol table");
+            break;
         }
         if (section[i].type >= 0x70000000 && section[i].type <= 0x7fffffff)
             type = CSTR("Processor-specific info");
@@ -146,9 +189,12 @@ bool inspect_elf(paddr_t data) {
             type = CSTR("Application-specific info");
 
         char flags[3] = {'-', '-', '-'};
-        if (section[i].flags & 1) flags[0] = 'W';
-        if (section[i].flags & 2) flags[1] = 'A';
-        if (section[i].flags & 4) flags[2] = 'X';
+        if (section[i].flags & 1)
+            flags[0] = 'W';
+        if (section[i].flags & 2)
+            flags[1] = 'A';
+        if (section[i].flags & 4)
+            flags[2] = 'X';
         // printf("\tSection[%zu]:\n"
         //        "\t\tName: %S (%u)\n", i, strings +1+section[i].name, section[i].name);
         printf("\tSection[%zu]:\n"
@@ -162,19 +208,10 @@ bool inspect_elf(paddr_t data) {
                "\t\t\"Info\": %#x\n"
                "\t\tAlignment: %#x\n"
                "\t\tEntry Size: %u\n",
-               i,
-               strings + section[i].name,
-               section[i].name,
-               type, section[i].type,
-               (const_string){.head=flags, .tail=&flags[3]}, section[i].flags, section[i].flags,
-               section[i].addr,
-               section[i].offset,
-               section[i].size,
-               section[i].link,
-               section[i].info,
-               section[i].addralign,
-               section[i].entsize
-        );
+               i, strings + section[i].name, section[i].name, type, section[i].type,
+               (const_string){.head = flags, .tail = &flags[3]}, section[i].flags, section[i].flags, section[i].addr,
+               section[i].offset, section[i].size, section[i].link, section[i].info, section[i].addralign,
+               section[i].entsize);
     }
 
     return elf32->entrypoint == USER_BASE;
@@ -185,7 +222,7 @@ bool inspect_elf(paddr_t data) {
 
 extern char __kernel_base[], __free_ram_end[];
 
-struct process* procs[PROCS_MAX] = {}; // All process control structures.
+struct process *procs[PROCS_MAX] = {}; // All process control structures.
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp, uint32_t *next_sp) {
     __asm__ __volatile__("addi sp, sp, -13 * 4\n" // Allocate stack space for 13 4-byte registers
@@ -222,12 +259,13 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp, uint32_t *next_sp)
 }
 
 __attribute__((naked)) void user_entry(void) {
-    __asm__ __volatile__("csrw sepc, %[sepc]        \n"
-                         "csrw sstatus, %[sstatus]  \n"
-                         "csrw stvec, %[user_entry]\n"
-                         "sret                      \n"
-                         :
-                         : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE | SSTATUS_SUM), [user_entry] "r"((uint32_t)user_trap));
+    __asm__ __volatile__(
+        "csrw sepc, %[sepc]        \n"
+        "csrw sstatus, %[sstatus]  \n"
+        "csrw stvec, %[user_entry]\n"
+        "sret                      \n"
+        :
+        : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE | SSTATUS_SUM), [user_entry] "r"((uint32_t)user_trap));
 }
 
 struct process *create_process_elf(const elf32_header *elf32) {
@@ -253,7 +291,7 @@ struct process *create_process_elf(const elf32_header *elf32) {
     if (!proc)
         PANIC("no free process slots");
 
-    proc->stack = (uint8_t(*)[STACK_SIZE])alloc_pages(PAGES_PER_STACK);
+    proc->stack = (uint8_t (*)[STACK_SIZE])alloc_pages(PAGES_PER_STACK);
 
     // Stack callee-saved registers. These register values will be restored in
     // the first context switch in switch_context.
@@ -277,7 +315,7 @@ struct process *create_process_elf(const elf32_header *elf32) {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map stack
-    for (paddr_t paddr = (paddr_t)proc->stack; paddr < (paddr_t)&((*proc->stack)[STACK_SIZE]); paddr += PAGE_SIZE)
+    for (paddr_t paddr = (paddr_t)proc->stack; paddr < (paddr_t) & ((*proc->stack)[STACK_SIZE]); paddr += PAGE_SIZE)
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map virtio
@@ -293,27 +331,33 @@ struct process *create_process_elf(const elf32_header *elf32) {
     }
     map_page(page_table, uart_base, uart_base, PAGE_R | PAGE_W);
 
-    elf32_program_header *program = (elf32_program_header*)((paddr_t)elf32 + elf32->program_table_offset);
+    elf32_program_header *program = (elf32_program_header *)((paddr_t)elf32 + elf32->program_table_offset);
     for (size_t i = 0; i < elf32->program_table_count; i++) {
-        if (program[i].segment_type != 0x1) continue;
+        if (program[i].segment_type != 0x1)
+            continue;
 
         paddr_t vaddr = align_down(program[i].p_vaddr, PAGE_SIZE);
         size_t sdiff = program[i].p_vaddr - vaddr;
         size_t pages = (program[i].p_memsz + (PAGE_SIZE - 1) + sdiff) / PAGE_SIZE;
 
-        PROCESS_DBG("Allocating %zu pages (%lu bytes) at %p for %lu-byte segment #%zu (copying %lu bytes from disk), which is offset by %zu bytes.\n",
-               pages, pages * PAGE_SIZE, vaddr, program[i].p_memsz, i, program[i].p_filesz, sdiff);
+        PROCESS_DBG("Allocating %zu pages (%lu bytes) at %p for %lu-byte segment #%zu (copying %lu bytes from disk), "
+                    "which is offset by %zu bytes.\n",
+                    pages, pages * PAGE_SIZE, vaddr, program[i].p_memsz, i, program[i].p_filesz, sdiff);
         paddr_t allocation = alloc_pages(pages);
-        memcpy_s((void*)(allocation + sdiff), pages * PAGE_SIZE, (void*)((paddr_t)elf32) + program[i].p_offset, program[i].p_filesz);
+        memcpy_s((void *)(allocation + sdiff), pages * PAGE_SIZE, (void *)((paddr_t)elf32) + program[i].p_offset,
+                 program[i].p_filesz);
         size_t diff = program[i].p_memsz - program[i].p_filesz;
         if (diff) {
             PROCESS_DBG("\tZeroing remaining %zu bytes...\n", diff);
-            memset_s((void*)(allocation + program[i].p_filesz + sdiff), diff, 0, diff);
+            memset_s((void *)(allocation + program[i].p_filesz + sdiff), diff, 0, diff);
         }
         uint32_t flags = PAGE_U;
-        if (program[i].flags & 1) flags |= PAGE_X;
-        if (program[i].flags & 2) flags |= PAGE_W;
-        if (program[i].flags & 4) flags |= PAGE_R;
+        if (program[i].flags & 1)
+            flags |= PAGE_X;
+        if (program[i].flags & 2)
+            flags |= PAGE_W;
+        if (program[i].flags & 4)
+            flags |= PAGE_R;
         for (size_t page = 0; page < pages; page++) {
             map_page(page_table, vaddr, allocation, flags);
             vaddr += PAGE_SIZE;
@@ -353,7 +397,7 @@ struct process *create_process(const void *image, size_t image_size) {
     if (!proc)
         PANIC("no free process slots");
 
-    proc->stack = (uint8_t(*)[STACK_SIZE])alloc_pages(PAGES_PER_STACK);
+    proc->stack = (uint8_t (*)[STACK_SIZE])alloc_pages(PAGES_PER_STACK);
 
     // Stack callee-saved registers. These register values will be restored in
     // the first context switch in switch_context.
@@ -377,7 +421,7 @@ struct process *create_process(const void *image, size_t image_size) {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map stack
-    for (paddr_t paddr = (paddr_t)proc->stack; paddr < (paddr_t)&((*proc->stack)[STACK_SIZE]); paddr += PAGE_SIZE)
+    for (paddr_t paddr = (paddr_t)proc->stack; paddr < (paddr_t) & ((*proc->stack)[STACK_SIZE]); paddr += PAGE_SIZE)
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
 
     // Map virtio
@@ -448,8 +492,8 @@ void kyield(void) {
         "csrw sscratch, %[sscratch]\n"
         :
         // Don't forget the trailing comma!
-        : [satp] "r"(SATP_SV32 | ((uint32_t)next->page_table / PAGE_SIZE)), [sscratch] "r"(
-                                                                                (uint32_t)&((*next->stack)[STACK_SIZE])));
+        : [satp] "r"(SATP_SV32 | ((uint32_t)next->page_table / PAGE_SIZE)), [sscratch] "r"((uint32_t)&(
+                                                                                (*next->stack)[STACK_SIZE])));
 
     switch_context(&prev->sp, &next->sp);
 }

@@ -105,7 +105,6 @@ struct virtio_blk_req {
     uint8_t status;
 } __attribute__((packed));
 
-
 // #define DISK_MAX_SIZE align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
 // #define DISK_MAX_SIZE align_up(4194304, SECTOR_SIZE)
 
@@ -125,7 +124,7 @@ struct virtio_blk_device {
     uint32_t sector_count;
 };
 
-struct virtio_blk_device* virtio_blk_init(paddr_t);
+struct virtio_blk_device *virtio_blk_init(paddr_t);
 void read_write_disk(struct virtio_blk_device *dev, void *buf, unsigned sector, int is_write);
 
 void probe_virtio_device(paddr_t location);

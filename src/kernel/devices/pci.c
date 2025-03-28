@@ -26,7 +26,7 @@ void print_pci_bar(struct pci_type0_header *type0, int num) {
     if (width == 0)
         return;
 
-    printf("\t\tBAR %d [0x%p] (Raw: 0x%x)\t", num, bar, bar->raw);
+    printf("\t\tBAR %d [%p] (Raw: 0x%x)\t", num, bar, bar->raw);
 
     uint32_t value = bar->raw;
     struct bar_packed *barp = (struct bar_packed *)&value;
@@ -64,7 +64,7 @@ void print_pci_bar(struct pci_type0_header *type0, int num) {
     // *(uint32_t *)0x10000000 = 0xa0a0a0a0;
 
     // type0->bar0.raw = (uint32_t)pages;
-    // printf("\nASDF (0x%p): 0x%x\n", &type0->bar0.raw, value & 0xFFFFFFF0);
+    // printf("\nASDF (%p): 0x%x\n", &type0->bar0.raw, value & 0xFFFFFFF0);
     // printf(
     //    "\t\t     BAR0: 0x%s\t ...\n"
     //    "\t\tSubsys ID: 0x%x\t Sub. Vend: 0x%x\n", type0->bar0.prefetchable ? "Prefetchable" : "",
@@ -76,7 +76,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
     struct pci_header *device_header = (struct pci_header *)address;
     if (device_header->device_id == 0xffff)
         return false;
-    // printf("Slot #%d@0x%p:"
+    // printf("Slot #%d@%p:"
     //             "\tDevice ID: 0x%x\tVendor ID: 0x%x\n"
     //         "\t\t   Status: %d  \t  Command: %d\n"
     //         "\t\t    Class: 0x%x\t Subclass: 0x%x\t  Prog IF: %d  \t    Revision ID: %d\n"
@@ -114,7 +114,8 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
             bridge->first_child = device;
         else {
             struct pci_ll *tail = bridge->first_child;
-            for (; tail->next != NULL; tail = tail->next);
+            for (; tail->next != NULL; tail = tail->next)
+                ;
             tail->next = device;
         }
         device->device.pci = device_header;

@@ -1,3 +1,4 @@
+#include <color.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -32,6 +33,7 @@ void *memcpy(void *restrict dst, const void *restrict src, size_t n) {
 errno_t memcpy_s(void *restrict dest, rsize_t destsz, const void *restrict src, rsize_t count) {
     // TODO: compare `destsz` and `count` to `RSIZE_MAX`.
     if (dest == NULL || src == NULL || count > destsz) {
+        printf(ANSI_RED "memcpy failure: dest=%p, src=%p, count=%zu, destsz=%zu\n", dest, src, count, destsz);
         assert(false && "MEMCPY FAILED");
         if (dest != NULL)
             while (destsz--)
@@ -109,25 +111,25 @@ string strcpy(string s1, const_string s2) {
 }
 
 char *strchr(const const_string str, int c) {
-  const char *s = str.head;
-  do {
-    if (*s == c) {
-      return (char *)s;
-    }
-  } while (*s++ && s < str.tail);
-  return NULL;
+    const char *s = str.head;
+    do {
+        if (*s == c) {
+            return (char *)s;
+        }
+    } while (*s++ && s < str.tail);
+    return NULL;
 }
 
 const_string strstr(const const_string s1, const const_string s2) {
-  const char *p = s1.head;
-  const size_t len = s2.tail - s2.head;
+    const char *p = s1.head;
+    const size_t len = s2.tail - s2.head;
 
-  if (!len)
-    return (const_string){.head = s1.head, .tail = s1.head};
+    if (!len)
+        return (const_string){.head = s1.head, .tail = s1.head};
 
-  for (; (p = strchr((const_string){.head=p, .tail=s1.tail}, *s2.head)) != 0; p++) {
-    if (strncmp(p, s2.head, len) == 0)
-      return (const_string){.head=p, .tail=p+(s2.tail - s2.head)};
-  }
-  return (const_string){.head=NULL, .tail=NULL};
+    for (; (p = strchr((const_string){.head = p, .tail = s1.tail}, *s2.head)) != 0; p++) {
+        if (strncmp(p, s2.head, len) == 0)
+            return (const_string){.head = p, .tail = p + (s2.tail - s2.head)};
+    }
+    return (const_string){.head = NULL, .tail = NULL};
 }

@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <common.h>
 #include <stddef.h>
 

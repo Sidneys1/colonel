@@ -14,20 +14,20 @@
 // }
 
 int intr_get() {
-  uint32_t sstatus = READ_CSR(sstatus);
-  return (sstatus & SSTATUS_SIE) != 0;
+    uint32_t sstatus = READ_CSR(sstatus);
+    return (sstatus & SSTATUS_SIE) != 0;
 }
 
 // disable device interrupts
 void intr_off() {
-  uint32_t sstatus = READ_CSR(sstatus);
-  WRITE_CSR(sstatus, sstatus & ~SSTATUS_SIE);
-  // w_sstatus(r_sstatus() & ~SSTATUS_SIE);
+    uint32_t sstatus = READ_CSR(sstatus);
+    WRITE_CSR(sstatus, sstatus & ~SSTATUS_SIE);
+    // w_sstatus(r_sstatus() & ~SSTATUS_SIE);
 }
 
 // enable device interrupts
 void intr_on() {
-  uint32_t sstatus= READ_CSR(sstatus);
-  WRITE_CSR(sstatus, sstatus | SSTATUS_SIE);
-  // w_sstatus(r_sstatus() | SSTATUS_SIE);
+    uint32_t sstatus = READ_CSR(sstatus);
+    WRITE_CSR(sstatus, sstatus | SSTATUS_SIE);
+    // w_sstatus(r_sstatus() | SSTATUS_SIE);
 }

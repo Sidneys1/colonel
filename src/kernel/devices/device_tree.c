@@ -1,22 +1,22 @@
+#include <color.h>
 #include <common.h>
 #include <console.h>
-#include <stddef.h>
 #include <devices/device_tree.h>
+#include <devices/pci.h>
 #include <devices/plic.h>
 #include <devices/uart.h>
 #include <devices/virtio.h>
-#include <devices/pci.h>
 #include <harts.h>
 #include <kernel.h>
 #include <memory/slab_allocator.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <color.h>
 
 #ifdef DEVICE_TREE_DEBUG
-#define DT_DBG(...) KDBG(ANSI_MAGENTA "[DEVICE-TREE] " __VA_ARGS__)
+#define DT_DBG(...) KDBG("DEVICE-TREE-CORE", __VA_ARGS__)
 #else
 #define DT_DBG(...)
 #endif
@@ -61,7 +61,8 @@ static void print_property_stringlist(const char *string_list, uint32_t len, boo
     putchar(']');
 }
 
-enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum FDT_TOKEN *token, const char *strings, size_t depth) {
+enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum FDT_TOKEN *token, const char *strings,
+                           size_t depth) {
     for (size_t i = 0; i < depth; i++)
         printf("│  ");
     printf("├─");
@@ -75,7 +76,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
         root = &self;
 
     uint32_t len = strnlen_s(name, MAX_NODE_NAME_LENGTH);
-    printf(" 0x%p " ANSI_GREEN, token);
+    printf(" %p " ANSI_GREEN, token);
     struct fdt_node *ptr = root;
     while (ptr != &self) {
         printf("%S/", ptr->name);
@@ -83,7 +84,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
             break;
         ptr = ptr->next;
     }
-    printf("%S"ANSI_RESET"\n", root == &self ? "/" : name);
+    printf("%S" ANSI_RESET "\n", root == &self ? "/" : name);
 
     if (ptr != &self)
         ptr->next = &self;
@@ -118,7 +119,7 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
                 // Do nothing
                 printf("<empty>");
             } else if (IS("reg")) {
-                printf("<cells[%lux%lu]> address="ANSI_CYAN"0x", self.address_cells, self.size_cells);
+                printf("<cells[%lux%lu]> address=" ANSI_CYAN "0x", self.address_cells, self.size_cells);
                 uint32_t ai = 0;
                 bool nz = false;
                 for (; ai < self.address_cells; ai++) {
@@ -126,35 +127,35 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
                     printf(nz ? "%08x" : "%x", value);
                     nz |= value;
                 }
-                printf(""ANSI_RESET"");
+                printf("" ANSI_RESET "");
                 if (self.size_cells) {
                     nz = false;
-                    printf(", size="ANSI_CYAN"0x");
+                    printf(", size=" ANSI_CYAN "0x");
                     for (uint32_t si = 0; si < self.size_cells; si++) {
                         uint32_t value = be_to_le(*((uint32_t *)(prop + 1) + ai + si));
                         printf(nz ? "%08x" : "%x", value);
                         nz |= value;
                     }
                 }
-                printf(""ANSI_RESET"");
+                printf("" ANSI_RESET "");
                 // printf(ANSI_RESET" - "ANSI_GREY"I don't understand this one at the moment..."ANSI_RESET"", 0);
             } else if (IS("#address-cells")) {
                 uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 self.address_cells = value;
-                printf("<u32> "ANSI_CYAN"%d"ANSI_RESET" ("ANSI_CYAN"0x%x"ANSI_RESET")", value, value);
+                printf("<u32> " ANSI_CYAN "%d" ANSI_RESET " (" ANSI_CYAN "0x%x" ANSI_RESET ")", value, value);
             } else if (IS("#size-cells")) {
                 uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 self.size_cells = value;
-                printf("<u32> "ANSI_CYAN"%d"ANSI_RESET" ("ANSI_CYAN"0x%x"ANSI_RESET")", value, value);
+                printf("<u32> " ANSI_CYAN "%d" ANSI_RESET " (" ANSI_CYAN "0x%x" ANSI_RESET ")", value, value);
             } else if (IS("virtual-reg") || IS("timebase-frequency") || IS("#interrupt-cells") ||
                        IS("clock-frequency") || IS("value") || IS("offset") || IS("riscv,ndev") || IS("regmap") ||
                        IS("linux,pci-domain") || IS("bank-width")) {
                 /* U32 */
-                printf("<u32> "ANSI_CYAN"%d"ANSI_RESET" ("ANSI_CYAN"0x%x"ANSI_RESET")", be_to_le(*(uint32_t *)(prop + 1)),
-                       be_to_le(*(uint32_t *)(prop + 1)));
+                printf("<u32> " ANSI_CYAN "%d" ANSI_RESET " (" ANSI_CYAN "0x%x" ANSI_RESET ")",
+                       be_to_le(*(uint32_t *)(prop + 1)), be_to_le(*(uint32_t *)(prop + 1)));
             } else if (IS("phandle") || IS("interrupt-parent") || IS("cpu")) {
                 /* <phandle> */
-                printf("<phandle> "ANSI_MAGENTA"0x%x"ANSI_RESET"", be_to_le(*(uint32_t *)(prop + 1)));
+                printf("<phandle> " ANSI_MAGENTA "0x%x" ANSI_RESET "", be_to_le(*(uint32_t *)(prop + 1)));
             } else if (IS("compatible") || IS("riscv,isa-extensions")) {
                 /* STRINGLIST */
                 printf("<stringlist> ");
@@ -163,12 +164,12 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
                        IS("mmu-type") || IS("riscv,isa") || IS("riscv,isa-base")) {
                 /* STRING */
                 const char *string = (char *)(prop + 1);
-                printf("<string> `"ANSI_GREEN"%S"ANSI_RESET"`", string);
+                printf("<string> `" ANSI_GREEN "%S" ANSI_RESET "`", string);
             } else if (IS("interrupts") || IS("interrupt-map-mask") || IS("interrupt-map") || IS("ranges") ||
                        IS("bus-range") || IS("interrupts-extended")) {
-                printf(ANSI_MAGENTA"<Unknown custom property type!>"ANSI_RESET"");
+                printf(ANSI_MAGENTA "<Unknown custom property type!>" ANSI_RESET "");
             } else {
-                printf(ANSI_MAGENTA"<Unhandled property type: `%S`!>"ANSI_RESET"", name);
+                printf(ANSI_MAGENTA "<Unhandled property type: `%S`!>" ANSI_RESET "", name);
                 // cont = false;
             }
 #undef IS
@@ -184,25 +185,25 @@ enum FDT_TOKEN *print_node(struct fdt_node *root, struct fdt_node *parent, enum 
             break;
 
         case FDT_END:
-            kprintf("Token at 0x%p is FDT_END\n", token);
+            kprintf("Token at %p is FDT_END\n", token);
             return token + 1;
 
         default:
             // kprintf();
-            PANIC("Token at 0x%p is unknown (0x%x)!\n", token, be_to_le(*token));
+            PANIC("Token at %p is unknown (0x%x)!\n", token, be_to_le(*token));
             break;
         }
     } while (cont);
 
     for (size_t i = 0; i < depth; i++)
         printf("│");
-    printf("╰─ /%S ("ANSI_RED"with errors"ANSI_RESET")\n", name);
+    printf("╰─ /%S (" ANSI_RED "with errors" ANSI_RESET ")\n", name);
     return token;
 }
 
 extern bool kernel_verbose;
 
-static const char * check_stringlist_contains(const char *string_list, const char *restrict cmp, uint32_t len) {
+static const char *check_stringlist_contains(const char *string_list, const char *restrict cmp, uint32_t len) {
     size_t inc = 0;
     do {
         if (strncmp(string_list + inc, cmp, MAX_NODE_NAME_LENGTH) == 0)
@@ -218,10 +219,10 @@ struct compatible_device {
     void (*const initializer)(paddr_t);
     const uint8_t priority;
 } const compatible_devices[] = {
-    {.compatible="riscv,plic0", .initializer=plic_init, .priority=2},
-    {.compatible="ns16550a", .initializer=uart_init, .priority=1},
-    {.compatible="virtio,mmio", .initializer=probe_virtio_device, .priority=1},
-    {.compatible="pci-host-ecam-generic", .initializer=probe_pci, .priority=1},
+    {.compatible = "riscv,plic0", .initializer = plic_init, .priority = 2},
+    {.compatible = "ns16550a", .initializer = uart_init, .priority = 1},
+    {.compatible = "virtio,mmio", .initializer = probe_virtio_device, .priority = 1},
+    {.compatible = "pci-host-ecam-generic", .initializer = probe_pci, .priority = 1},
 };
 
 #define NUM_COMPAT_DEVICES (sizeof(compatible_devices) / sizeof(struct compatible_device))
@@ -235,37 +236,44 @@ struct device_node {
 void check_compat(const const_string node_name, const fdt_prop *prop, struct device_node **head) {
     const struct compatible_device *compatible = NULL;
     for (size_t i = 0; i < NUM_COMPAT_DEVICES; i++) {
-        if (check_stringlist_contains((const char*)(prop + 1), compatible_devices[i].compatible, be_to_le(prop->len)) != NULL) {
+        if (check_stringlist_contains((const char *)(prop + 1), compatible_devices[i].compatible,
+                                      be_to_le(prop->len)) != NULL) {
             compatible = &compatible_devices[i];
             break;
         }
     }
 
     if (compatible != NULL) {
-        const char * c = node_name.head;
-        while (*++c != '@' && *c != '\0' && c != node_name.tail);
+        const char *c = node_name.head;
+        while (*++c != '@' && *c != '\0' && c != node_name.tail)
+            ;
         if (*c != '\0' && c != node_name.tail) {
             struct device_node *node = slab_malloc(struct device_node);
             node->compatible = compatible;
             node->address = strtoul((const_string){.head = c + 1, .tail = node_name.tail}, 16);
-            DT_DBG("Adding device %s (%S), priority %hhu, to chain...\n", node_name, compatible->compatible, compatible->priority);
+            DT_DBG("Adding device %s (%S), priority %hhu, to chain...\n", node_name, compatible->compatible,
+                   compatible->priority);
             if (*head == NULL) {
                 DT_DBG("\tNo head, setting as head.\n");
                 *head = node;
                 node->next = NULL;
             } else if ((*head)->compatible->priority <= compatible->priority) {
-                DT_DBG("\tHead priority was %hhu, but we're %hhu, so we're now the head.\n", (*head)->compatible->priority, compatible->priority);
+                DT_DBG("\tHead priority was %hhu, but we're %hhu, so we're now the head.\n",
+                       (*head)->compatible->priority, compatible->priority);
                 node->next = *head;
                 *head = node;
             } else {
-                DT_DBG("\tWe're a lower priority than head (%hhu), so we're searching for an entry point...\n", (*head)->compatible->priority);
+                DT_DBG("\tWe're a lower priority than head (%hhu), so we're searching for an entry point...\n",
+                       (*head)->compatible->priority);
                 struct device_node *c = *head;
-                size_t no = 1;
+                // size_t no = 1;
                 while (c->next != NULL && c->next->compatible->priority > compatible->priority) {
-                    DT_DBG("\t\tEntry #%zu priority was %hhu (> ours, %hhu), moving along...\n", ++no, c->next->compatible->priority, compatible->priority);
+                    DT_DBG("\t\tEntry #%zu priority was %hhu (> ours, %hhu), moving along...\n", ++no,
+                           c->next->compatible->priority, compatible->priority);
                     c = c->next;
                 }
-                DT_DBG("\t\tEntry #%zu priority is %hhu (<= than ours), so we're inserting before it.\n", no + 1, c->next->compatible->priority);
+                DT_DBG("\t\tEntry #%zu priority is %hhu (<= than ours), so we're inserting before it.\n", no + 1,
+                       c->next->compatible->priority);
                 node->next = c->next;
                 c->next = node;
             }
@@ -274,7 +282,8 @@ void check_compat(const const_string node_name, const fdt_prop *prop, struct dev
 }
 
 #define IS(x) strncmp(name, x, sizeof x) == 0
-enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, const char *strings, struct device_node **head) {
+enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, const char *strings,
+                              struct device_node **head) {
     bool cont = true;
 
     const char *node_name = (char *)((uint32_t)token + 4);
@@ -302,9 +311,10 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, co
             const char *name = strings + be_to_le(prop->nameoff);
 
             if (IS("bootargs") && strncmp(node_name, "chosen", 7) == 0) {
-                if (strnlen_s((const char*)(prop + 1), 1)) {
+                if (strnlen_s((const char *)(prop + 1), 1)) {
                     kprintf("Found boot args: `%S`\n", (char *)(prop + 1));
-                    bootargs = (const_string){.head=(char*)(prop+1),.tail=(char*)(prop+1) + be_to_le(prop->len)};
+                    bootargs =
+                        (const_string){.head = (char *)(prop + 1), .tail = (char *)(prop + 1) + be_to_le(prop->len)};
                 }
 
                 if (strncmp((char *)(prop + 1), "verbose", 8) == 0) {
@@ -318,7 +328,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, co
                 uint32_t value = be_to_le(*(uint32_t *)(prop + 1));
                 self.size_cells = value;
             } else if (IS("compatible")) {
-                check_compat((const const_string){.head=node_name, .tail=node_name + len}, prop, head);
+                check_compat((const const_string){.head = node_name, .tail = node_name + len}, prop, head);
             }
 
             uint32_t next_addr = ((uint32_t)(prop + 1)) + be_to_le(prop->len);
@@ -337,7 +347,7 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, co
             break;
 
         default:
-            PANIC("Token at 0x%p is unknown (0x%x)!\n", token, be_to_le(*token));
+            PANIC("Token at %p is unknown (0x%x)!\n", token, be_to_le(*token));
             break;
         }
     } while (cont);
@@ -347,7 +357,8 @@ enum FDT_TOKEN *traverse_node(struct fdt_node *parent, enum FDT_TOKEN *token, co
 
 void device_tree_init(const fdt_header *fdt) {
     if (fdt->magic != 0xedfe0dd0)
-        PANIC("Could not find FDT magic at 0x%p!\n", fdt);const char *strings = (char *)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
+        PANIC("Could not find FDT magic at %p!\n", fdt);
+    const char *strings = (char *)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
     enum FDT_TOKEN *token = (enum FDT_TOKEN *)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
 
     struct device_node *head = NULL;
@@ -368,7 +379,7 @@ void device_tree_init(const fdt_header *fdt) {
 
 void inspect_device_tree(const fdt_header *fdt) {
     if (fdt->magic != 0xedfe0dd0)
-        PANIC("Could not find FDT magic at 0x%p!\n", fdt);
+        PANIC("Could not find FDT magic at %p!\n", fdt);
     const char *strings = (char *)((uint32_t)fdt + be_to_le(fdt->off_dt_strings));
     enum FDT_TOKEN *token = (enum FDT_TOKEN *)((uint32_t)fdt + be_to_le(fdt->off_dt_struct));
 
@@ -381,17 +392,16 @@ void inspect_device_tree(const fdt_header *fdt) {
     kprintf("Strings size is %d bytes\n", be_to_le(fdt->size_dt_strings));
     kprintf("Devicetree size is %d bytes\n", be_to_le(fdt->size_dt_struct));
     const fdt_reserve_entry *entries = (void *)((uint32_t)fdt + be_to_le(fdt->off_mem_rsvmap));
-    kprintf("Reserved entries table starts %d bytes after the FDT header (at 0x%p).\n",
-            be_to_le(fdt->off_mem_rsvmap), entries);
+    kprintf("Reserved entries table starts %d bytes after the FDT header (at %p).\n", be_to_le(fdt->off_mem_rsvmap),
+            entries);
     long i = 0;
     while ((entries[i].address + entries[i].size) != 0) {
         kprintf("Entry at %d: %x (%d)\n", i, entries[i].address, entries[i].size);
         ++i;
     }
     kprintf("There are %d reserved memory ranges in the device tree.\n", i);
-    kprintf("Strings block starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_strings),
-            strings);
-    kprintf("Device tree starts %d bytes after the FDT header (at 0x%p).\n", be_to_le(fdt->off_dt_struct), token);
+    kprintf("Strings block starts %d bytes after the FDT header (at %p).\n", be_to_le(fdt->off_dt_strings), strings);
+    kprintf("Device tree starts %d bytes after the FDT header (at %p).\n", be_to_le(fdt->off_dt_struct), token);
 
     print_node(NULL, NULL, token, strings, 0);
     hart->stdout->auto_flush = true;

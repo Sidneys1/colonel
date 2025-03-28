@@ -1,22 +1,22 @@
-#include <kernel.h>
-#include <process.h>
-#include <stddef.h>
-#include <spinlock.h>
+#include <color.h>
+#include <console.h>
 #include <devices/plic.h>
 #include <devices/uart.h>
+#include <kernel.h>
+#include <process.h>
+#include <spinlock.h>
+#include <stddef.h>
 #include <stdio.h>
-#include <console.h>
-#include <color.h>
 
 #define TX_BUF_SIZE 32
 char tx_buf[TX_BUF_SIZE];
 uint64_t uart_tx_w, uart_tx_r;
-struct spinlock uart_tx_lock = {.name="uart", .locked=0, .hart=0};
+struct spinlock uart_tx_lock = {.name = "uart", .locked = 0, .hart = 0};
 
 paddr_t uart_base = 0;
 
-#define REG(reg) ((volatile uint8_t*)(uart_base + (reg)))
-#define READ_REG(reg) (*(REG(reg)))
+#define REG(reg)              ((volatile uint8_t *)(uart_base + (reg)))
+#define READ_REG(reg)         (*(REG(reg)))
 #define WRITE_REG(reg, value) (*(REG(reg)) = (value))
 
 #define RHR 0 // (RO) Receive Holding Register
@@ -31,20 +31,21 @@ paddr_t uart_base = 0;
 #define DLL 0 // (RW+DLAB) Divisor Latch LSB
 #define DLM 1 // (RW+DLAB) Divisor Latch MSB
 
-#define FCR_FIFO_ENABLE (1<<0) // Enable FIFOs
-#define FCR_FIFO_CLEAR (3<<1) // Clear receive and transmit FIFOs
+#define FCR_FIFO_ENABLE (1 << 0) // Enable FIFOs
+#define FCR_FIFO_CLEAR  (3 << 1) // Clear receive and transmit FIFOs
 
-#define LCR_BAUD_LATCH (1<<7) // DLAB: DLL and DLM accessible
-#define LCR_EIGHT_BITS (3<<0) // Eight Bits, No Parity
+#define LCR_BAUD_LATCH (1 << 7) // DLAB: DLL and DLM accessible
+#define LCR_EIGHT_BITS (3 << 0) // Eight Bits, No Parity
 
-#define WRITE_DL(value) WRITE_REG(DLL, (uint8_t)(value & 0xff)); WRITE_REG(DLM, (uint8_t)((value >> 8) & 0xff))
+#define WRITE_DL(value)                                                                                                \
+    WRITE_REG(DLL, (uint8_t)(value & 0xff));                                                                           \
+    WRITE_REG(DLM, (uint8_t)((value >> 8) & 0xff))
 
-#define LSR_DATA_AVAILABLE (1<<0)
-#define LSR_TX_EMPTY (1<<5)
+#define LSR_DATA_AVAILABLE (1 << 0)
+#define LSR_TX_EMPTY       (1 << 5)
 
-#define IER_RX_ENABLE (1<<0) // Enable "received data available" interrupts
-#define IER_TX_ENABLE (1<<1) // Enable "transmitter holding register empty" interrupts
-
+#define IER_RX_ENABLE (1 << 0) // Enable "received data available" interrupts
+#define IER_TX_ENABLE (1 << 1) // Enable "transmitter holding register empty" interrupts
 
 // UART Divisor Latch States
 enum : uint16_t {
@@ -66,7 +67,8 @@ void uart_init(paddr_t base) {
         return;
     }
     if (uart_base != 0) {
-        kprintf(ANSI_RED "Cannot initialize serial device at %#p, already initialized serial at %#p.\n", base, uart_base);
+        kprintf(ANSI_RED "Cannot initialize serial device at %#p, already initialized serial at %#p.\n", base,
+                uart_base);
         return;
     }
     uart_base = base;
@@ -86,7 +88,7 @@ void uart_init(paddr_t base) {
     kernel_io_config.putc = &uartputc_sync;
     kernel_io_config.getc = &uart_getc;
 
-    kprintf("Initialized UART device at 0x%p.\n", uart_base);
+    kprintf("Initialized UART device at %p.\n", uart_base);
 }
 
 void uart_pump(void) {
@@ -115,7 +117,7 @@ int uart_getc(void) {
 
 void uartputc(char c) {
     acquire(&uart_tx_lock);
-    while(uart_tx_w == uart_tx_r + TX_BUF_SIZE) {
+    while (uart_tx_w == uart_tx_r + TX_BUF_SIZE) {
         // TODO: sleep;
         PANIC("WE DON'T SUPPORT SLEEP YET\n");
     }
@@ -134,7 +136,7 @@ void uartputc_sync(char c) {
 
     // wait for Transmit Holding Empty to be set in LSR
     // uint32_t time = READ_CSR(time);
-    while((READ_REG(LSR) & LSR_TX_EMPTY) == 0)
+    while ((READ_REG(LSR) & LSR_TX_EMPTY) == 0)
         ;
     // printf("Slept for %ld ticks ", READ_CSR(time) - time);
     WRITE_REG(THR, c);
@@ -148,7 +150,8 @@ void uart_interrupt(void) {
     while (1) {
         int c = uart_getc();
         // printf("Trying to get a char (%d)...\n", c);
-        if (c == -1) break;
+        if (c == -1)
+            break;
         printf("Got a char (%c)!\n", c);
         s_putchar(&stdin, c);
         // TODO: wakeup
