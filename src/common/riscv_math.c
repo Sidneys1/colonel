@@ -82,71 +82,13 @@ uint64_t __divmoddi4(uint64_t a, uint64_t b, uint64_t *c) {
     return (a << 1) | (wrap & 1); // return the quotient
 }
 
-// uint64_t __umoddi3(uint64_t a, uint64_t b) {
-//     uint64_t r;
-//     __divmoddi4(a, b, &r);
-//     return r;
-// }
-
-// uint64_t __udivdi3(uint64_t a, uint64_t b) {
-//      return __divmoddi4(a, b, NULL);
-// }
-
-// // extern int64_t __moddi3(int64_t a, int64_t b) {
-// //     uint64_t ret;
-// //     __divmoddi4(a, b, &ret);
-// //     return ret;
-// // }
-
-// // extern int64_t __divdi3(int64_t a, int64_t b) { return __divmoddi4(a, b, NULL); }
-
-
-
-
-
-
-
 uint64_t __umoddi3(uint64_t a, uint64_t b) {
-    // putchar('\t');
-    // for (const char *c = "__umoddi3("; *c != '\0'; c++)
-    //     putchar(*c);
-    // uint64_t x = a;
-    // while (x) {
-    //     putchar('0' + (x % 10));
-    //     x /= 10;
-    // }
-    // putchar(',');
-    // x = b;
-    // while (x) {
-    //     putchar('0' + (x % 10));
-    //     x /= 10;
-    // }
-    // putchar(')');
-    // putchar('\n');
     uint64_t ret;
     __divmoddi4(a, b, &ret);
     return ret;
 }
 
-uint64_t __udivdi3(uint64_t a, uint64_t b) {
-    // putchar('\t');
-    // for (const char *c = "__udivdi3("; *c != '\0'; c++)
-    //     putchar(*c);
-    // uint32_t x = a;
-    // while (x) {
-    //     putchar('0' + (x % 10));
-    //     x /= 10;
-    // }
-    // putchar(',');
-    // x = b;
-    // while (x) {
-    //     putchar('0' + (x % 10));
-    //     x /= 10;
-    // }
-    // putchar(')');
-    // putchar('\n');
-    return __divmoddi4(a, b, NULL);
-}
+uint64_t __udivdi3(uint64_t a, uint64_t b) { return __divmoddi4(a, b, NULL); }
 
 int64_t __moddi3(int64_t a, int64_t b) {
     uint64_t ret;

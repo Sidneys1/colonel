@@ -48,7 +48,7 @@ CFLAGSEXTRA?=-DDEBUG -O0 -ggdb -fno-omit-frame-pointer
 # Linker flags
 LDFLAGS?=-fuse-ld=lld -Wl,--undefined=main -Wl,--undefined=exit -Wl,--undefined=kernel_main
 # Cflags. Appends CFLAGSEXTRA.  -mabi=ilp32f -flto
-CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
+CFLAGS=-std=c23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -mstack-alignment=4 -mstackrealign -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CFLAGSEXTRA}
 # Extra kernel-mode flags.
 KCFLAGS:=-isystem ./include/kernel/
 # Extra user-mode flags.
@@ -57,7 +57,7 @@ UCFLAGS:=-isystem ./include/user/
 # -flto -Wl,--gc-sections,--print-gc-sections  -ffunction-sections -fdata-sections
 CPPLDFLAGS?=-fuse-ld=lld
 CPPFLAGSEXTRA?=-DDEBUG -O0 -ggdb -fno-omit-frame-pointer
-CPPFLAGS=-std=c++23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CPPFLAGSEXTRA}
+CPPFLAGS=-std=c++23 -Wall -Wextra -Wno-string-plus-int --target=riscv32 -march=rv32g -mstack-alignment=4 -mstackrealign -ffreestanding -nostdlib -isystem ./include/stdlib -isystem ./include/common/ ${CPPFLAGSEXTRA}
 UCPPFLAGS:=-isystem ./include/user/
 
 # Recursive wildcard globs
