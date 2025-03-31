@@ -282,7 +282,7 @@ struct process *create_process_elf(const elf32_header *elf32) {
         for (i = 0; i < PROCS_MAX; i++) {
             if (procs[i] == NULL) {
                 // proc = procs[i] = (struct process*)slab_alloc(&root_slab32);
-                proc = procs[i] = slab_malloc(struct process);
+                proc = procs[i] = slab_new(struct process);
                 break;
             }
         }
@@ -388,7 +388,7 @@ struct process *create_process(const void *image, size_t image_size) {
         for (i = 0; i < PROCS_MAX; i++) {
             if (procs[i] == NULL) {
                 // proc = procs[i] = (struct process*)slab_alloc(&root_slab32);
-                proc = procs[i] = slab_malloc(struct process);
+                proc = procs[i] = slab_new(struct process);
                 break;
             }
         }

@@ -95,7 +95,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
     // putchar('\n');
 
     if (device_header->class_code == 0x06) {
-        struct pci_ll *bridge = slab_malloc(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
+        struct pci_ll *bridge = slab_new(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
         bridge->first_child = NULL;
         bridge->next = NULL;
         // bridge->prev = pci_ll_tail;
@@ -107,7 +107,7 @@ bool probe_pci_device(paddr_t base, uint8_t bus, uint8_t slot, uint8_t func, uin
         if (slot == 0)
             bridges[bus] = bridge;
     } else {
-        struct pci_ll *device = slab_malloc(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
+        struct pci_ll *device = slab_new(struct pci_ll); // (struct pci_ll *)slab_alloc(&root_slab16);
         device->next = NULL;
         struct pci_ll *bridge = bridges[bus];
         if (bridge->first_child == NULL)

@@ -248,7 +248,7 @@ void check_compat(const const_string node_name, const fdt_prop *prop, struct dev
         while (*++c != '@' && *c != '\0' && c != node_name.tail)
             ;
         if (*c != '\0' && c != node_name.tail) {
-            struct device_node *node = slab_malloc(struct device_node);
+            struct device_node *node = slab_new(struct device_node);
             node->compatible = compatible;
             node->address = strtoul((const_string){.head = c + 1, .tail = node_name.tail}, 16);
             DT_DBG("Adding device %s (%S), priority %hhu, to chain...\n", node_name, compatible->compatible,

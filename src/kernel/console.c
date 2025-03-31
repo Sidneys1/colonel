@@ -126,7 +126,7 @@ void init_streams(void) {
 }
 
 struct stream *create_stream(enum StreamDirection dir, struct stream *target, bool buffered, bool auto_flush) {
-    struct stream *stream = slab_malloc(struct stream); //  (struct stream*)slab_alloc(&root_slab32);
+    struct stream *stream = slab_new(struct stream); //  (struct stream*)slab_alloc(&root_slab32);
     // TODO: validate target (exists, direction, etc);
     stream->target = target;
     // stream->no = ++streamno;

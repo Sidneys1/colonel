@@ -649,6 +649,20 @@ int _vsnprintf(out_fct_type out, char *restrict buffer, const size_t maxlen, con
                 if (flags & FLAGS_LONG_LONG) {
 #ifdef PRINTF_SUPPORT_LONG_LONG
                     const long long value = va_arg(va, long long);
+                    // for (const char *c = "printf(%lld="; *c != '\0'; c++)
+                    //     putchar(*c);
+                    // int x = value;
+                    // if (x < 0) {
+                    //     putchar('-');
+                    //     x = -x;
+                    // }
+                    // bool any = true;
+                    // while (x || any) {
+                    //     putchar('0' + (x % 10));
+                    //     x /= 10;
+                    //     any = false;
+                    // }
+                    // putchar(')');
                     idx = _ntoa_long_long(out, buffer, idx, maxlen, (unsigned long long)(value > 0 ? value : 0 - value),
                                           value < 0, base, precision, width, flags);
 #endif
@@ -667,6 +681,17 @@ int _vsnprintf(out_fct_type out, char *restrict buffer, const size_t maxlen, con
                 // Unsigned
                 if (flags & FLAGS_LONG_LONG) {
 #ifdef PRINTF_SUPPORT_LONG_LONG
+                    // unsigned long long value = va_arg(va, unsigned long long);
+                    // for (const char *c = "printf(%llu="; *c != '\0'; c++)
+                    //     putchar(*c);
+                    // unsigned int x = value;
+                    // bool any = true;
+                    // while (x || any) {
+                    //     putchar('0' + (x % 10));
+                    //     x /= 10;
+                    //     any = false;
+                    // }
+                    // putchar(')');
                     idx = _ntoa_long_long(out, buffer, idx, maxlen, va_arg(va, unsigned long long), false, base,
                                           precision, width, flags);
 #endif
@@ -688,6 +713,7 @@ int _vsnprintf(out_fct_type out, char *restrict buffer, const size_t maxlen, con
         case 'F': {
             if (*format == 'F')
                 flags |= FLAGS_UPPERCASE;
+
             idx = _ftoa(out, buffer, idx, maxlen, va_arg(va, double), precision, width, flags);
             format++;
         } break;

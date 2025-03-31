@@ -394,7 +394,8 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     } else {
         kprintf("Kernel was passed `noinit`, not initializing user-space.\n");
 
-        kprintf(ANSI_GREEN "Experiment time!\n");
+        kprintf(ANSI_GREEN "Experiment time!\n" ANSI_RESET);
+#if 0
         const char *paths[] = {"ustar0:/init.elf", "fat0:/init.elf", "fat1:/init.elf", "fat2:/init.elf"};
         size_t pages_size = 0;
         void *pages = NULL;
@@ -412,17 +413,17 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
             printf("Read %zu bytes of %zu-byte file. CRC32 checksum: 0x%08X. File magic: \"%S\".\n\n", read,
                    file0->size, crc32buf(pages, read), (const char *)pages);
         }
+#endif
+#if 0 // Test bigslabs
+        void *data = slab_malloc_dynamic(512);
+        slab_dbg(&root_slab512);
+        (void)slab_free(&root_slab512, data);
+        slab_dbg(&root_slab512);
+#endif
 
-        // struct file *file2 = fs_lookup("ustar0:/init.elf");
-        // printf("\nFound file: %p (`%S`)\n", file2, *file2->super.name);
-        // void *const pages2 = (void*)alloc_pages(file2->size / PAGE_SIZE);
-        // const size_t read2 = file2->super.filesystem->read_file(file2->super.filesystem, pages2, file2->super.name);
-        // printf("Read %zu bytes of %zu-byte file from USTAR. File magic: \"%S\"\n", read, file2->size, (const
-        // char*)pages2);
-
-        // uint32_t crc32_2 = crc32buf(pages2, read2);
-        // // Print the CRC value
-        // printf("CRC32 checksum: 0x%08X\n", crc32_2);
+        int64_t a = 0, b = 1, c = -1, d = 13;
+        printf("a=%d\nb=%d\nc=%d\nd=%d\n", 1, 2, 3, 4, 5);
+        printf("d=%d\nlld=%lld\nd=%d\n", 1, a, 3, 4);
     }
 
     // if (kernel_verbose) {
@@ -431,6 +432,10 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     slab_dbg(&root_slab16);
     slab_dbg(&root_slab32);
     slab_dbg(&root_slab64);
+    slab_dbg(&root_slab128);
+    slab_dbg(&root_slab256);
+    slab_dbg(&root_slab512);
+    slab_dbg(&root_slab1024);
     // }
 
 #endif

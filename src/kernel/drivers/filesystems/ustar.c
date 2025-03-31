@@ -69,7 +69,7 @@ size_t read_ustar_file(struct filesystem *fs, void *restrict buffer, char (*path
 }
 
 bool ustar_init(struct block_device *dev, struct block *block) {
-    struct ustar_filesystem *fs = slab_malloc(struct ustar_filesystem);
+    struct ustar_filesystem *fs = slab_new(struct ustar_filesystem);
     fs->super.type_name = "USTAR";
     fs->super.device = dev;
     fs->super.read_file = read_ustar_file;
@@ -96,14 +96,16 @@ bool ustar_init(struct block_device *dev, struct block *block) {
 
         int filesz = oct2int(header->size, sizeof(header->size));
 
-        struct ustar_file *file = slab_malloc(struct ustar_file);
+        struct ustar_file *file = slab_new(struct ustar_file);
         file->super.super.filesystem = SUPER(*fs);
 
-        char *buffer = _slab_malloc(MAX_FILENAME_LENGTH);
+
+        const int actual_length = snprintf(NULL, MAX_SLAB_SIZE, "ustar%zu:/%S", num, header->name);
+        char *buffer = slab_malloc(actual_length + 1);
         file->super.super.name = (char (*)[MAX_FILENAME_LENGTH])buffer;
         // char *path
         // strncpy_s(buffer, sizeof *file->name, header->name, sizeof header->name);
-        snprintf(buffer, sizeof(*file->super.super.name), "ustar%zu:/%S", num, header->name);
+        snprintf(buffer, actual_length + 1, "ustar%zu:/%S", num, header->name);
         // if ((unsigned int)filesz > sizeof file->data)
         //     PANIC("Cannot load file `%S`, because it is larger than the available buffer (%d vs %d)!\n", file->name,
         //           filesz, sizeof file->data);

@@ -268,7 +268,7 @@ bool fat12_init(const struct block_device *dev, uint32_t base_sector, const stru
 
     const uint32_t bytes_per_cluster = (fat2->fat.sectors_per_cluster * fat2->fat.bytes_per_sector);
 
-    struct fat_filesystem *fs = slab_malloc(struct fat_filesystem);
+    struct fat_filesystem *fs = slab_new(struct fat_filesystem);
     fs->bytes_per_cluster = bytes_per_cluster;
     fs->bytes_per_sector = fat2->fat.bytes_per_sector;
     fs->relative_first_data_sector = relative_first_data_sector;
@@ -410,10 +410,10 @@ bool fat12_init(const struct block_device *dev, uint32_t base_sector, const stru
         FAT_DBG(ANSI_CYAN "\tFile should be %u clusters (last cluster is only %u bytes).\n" ANSI_RESET,
                 this_entry->file_size / bytes_per_cluster + ((this_entry->file_size % bytes_per_cluster) ? 1 : 0), rem);
 
-        struct fat_file *file = slab_malloc(struct fat_file);
+        struct fat_file *file = slab_new(struct fat_file);
         file->super.super.filesystem = SUPER(*fs);
         file->start_cluster = ((uint32_t)this_entry->cluster_high << 16) | this_entry->cluster_low;
-        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])_slab_malloc(MAX_FILENAME_LENGTH);
+        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])slab_malloc(MAX_FILENAME_LENGTH);
 
         if (buffer[0] == '\0') {
             const_string find = strstr(fname, CSTR(" "));
@@ -602,7 +602,7 @@ bool fat16_init(const struct block_device *dev, uint32_t base_sector, const stru
 
     const uint32_t bytes_per_cluster = (fat2->fat.sectors_per_cluster * fat2->fat.bytes_per_sector);
 
-    struct fat_filesystem *fs = slab_malloc(struct fat_filesystem);
+    struct fat_filesystem *fs = slab_new(struct fat_filesystem);
     fs->bytes_per_cluster = bytes_per_cluster;
     fs->bytes_per_sector = fat2->fat.bytes_per_sector;
     fs->relative_first_data_sector = relative_first_data_sector;
@@ -768,10 +768,10 @@ bool fat16_init(const struct block_device *dev, uint32_t base_sector, const stru
         //     ((start_cluster - 2) * bytes_per_cluster), (uint32_t)(first_data_sector * fat->bytes_per_sector) +
         //     ((start_cluster - 2) * bytes_per_cluster) + this_entry->file_size);
 
-        struct fat_file *file = slab_malloc(struct fat_file);
+        struct fat_file *file = slab_new(struct fat_file);
         file->super.super.filesystem = SUPER(*fs);
         file->start_cluster = ((uint32_t)this_entry->cluster_high << 16) | this_entry->cluster_low;
-        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])_slab_malloc(MAX_FILENAME_LENGTH);
+        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])slab_malloc(MAX_FILENAME_LENGTH);
 
         if (buffer[0] == '\0') {
             const_string find = strstr(fname, CSTR(" "));

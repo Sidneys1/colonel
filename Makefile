@@ -202,6 +202,9 @@ disk/%.elf: ${BUILD_DIR}/%.stripped.elf
 disk/%.bin: ${BUILD_DIR}/%.stripped.elf
 	${OBJCOPY} --set-section-flags .bss=alloc,contents -O binary $^ $@
 
+disk/reallylongfilename.txt:
+	touch $@
+
 ${BUILD_DIR}/kernel.elf: $(call guard,CFLAGSEXTRA)
 ${BUILD_DIR}/kernel.elf ${BUILD_DIR}/kernel.map &: ${KERNEL_OBJ} ${COMMON_OBJ} ${BUILD_DIR}/stdlib.a kernel.ld
 	${CC} ${CFLAGS} ${KCFLAGS} ${LDFLAGS} -Wl,-Map=${BUILD_DIR}/kernel.map -o $@ $^

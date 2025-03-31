@@ -7,7 +7,7 @@
 #include <io.h>
 
 #define SECTOR_SIZE         512
-#define MAX_FILENAME_LENGTH 64
+#define MAX_FILENAME_LENGTH 1024
 
 #ifdef IO_DEBUG
 #include <kernel.h>

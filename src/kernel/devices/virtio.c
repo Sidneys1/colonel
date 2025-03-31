@@ -127,7 +127,7 @@ void probe_virtio_device(paddr_t base) {
 struct virtio_virtq *virtq_init(paddr_t base, unsigned index) {
     // Allocate a region for the virtqueue.
     paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
-    struct virtio_virtq *vq = (struct virtio_virtq *)virtq_paddr; // slab_malloc(struct virtio_virtq);
+    struct virtio_virtq *vq = (struct virtio_virtq *)virtq_paddr; // slab_new(struct virtio_virtq);
     vq->queue_index = index;
     vq->used_index = (volatile uint16_t *)&vq->used.index;
 
@@ -154,13 +154,13 @@ size_t virtio_read_block(const struct block_device *dev, void *restrict tgt, siz
 }
 
 struct virtio_blk_device *virtio_blk_init(paddr_t base) {
-    struct virtio_blk_device *device = slab_malloc(struct virtio_blk_device);
+    struct virtio_blk_device *device = slab_new(struct virtio_blk_device);
     device->super.read_block = virtio_read_block;
     device->virtio.next = NULL;
     device->virtio.base_addr = base;
     device->virtio.device_type = VIRTIO_DEVICE_BLOCK;
 
-    char (*buffer)[16] = (char (*)[16])slab_malloc(struct { char _[16]; });
+    char (*buffer)[16] = (char (*)[16])slab_new(struct { char _[16]; });
     snprintf(*buffer, 16, "virtio@%08x", base);
     device->super.id = *buffer;
 
