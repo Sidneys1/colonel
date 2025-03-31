@@ -99,7 +99,6 @@ bool ustar_init(struct block_device *dev, struct block *block) {
         struct ustar_file *file = slab_new(struct ustar_file);
         file->super.super.filesystem = SUPER(*fs);
 
-
         const int actual_length = snprintf(NULL, MAX_SLAB_SIZE, "ustar%zu:/%S", num, header->name);
         char *buffer = slab_malloc(actual_length + 1);
         file->super.super.name = (char (*)[MAX_FILENAME_LENGTH])buffer;

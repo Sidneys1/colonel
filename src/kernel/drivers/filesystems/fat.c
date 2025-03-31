@@ -771,7 +771,6 @@ bool fat16_init(const struct block_device *dev, uint32_t base_sector, const stru
         struct fat_file *file = slab_new(struct fat_file);
         file->super.super.filesystem = SUPER(*fs);
         file->start_cluster = ((uint32_t)this_entry->cluster_high << 16) | this_entry->cluster_low;
-        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])slab_malloc(MAX_FILENAME_LENGTH);
 
         if (buffer[0] == '\0') {
             const_string find = strstr(fname, CSTR(" "));
@@ -790,7 +789,9 @@ bool fat16_init(const struct block_device *dev, uint32_t base_sector, const stru
                 *c = (sext.head[i] >= 'A' && sext.head[i] <= 'Z') ? sext.head[i] + ('a' - 'A') : sext.head[i];
         }
 
-        snprintf(*fnameBuffer, sizeof(*file->super.super.name), "fat%zu:/%S", this_drive, buffer);
+        size_t len = snprintf(NULL, sizeof(*file->super.super.name), "fat%zu:/%S", this_drive, buffer);
+        char (*fnameBuffer)[MAX_FILENAME_LENGTH] = (char (*)[MAX_FILENAME_LENGTH])slab_malloc(len + 1);
+        snprintf(*fnameBuffer, len + 1, "fat%zu:/%S", this_drive, buffer);
         file->super.super.name = (char (*)[MAX_FILENAME_LENGTH])fnameBuffer;
 
         file->super.size = this_entry->file_size;

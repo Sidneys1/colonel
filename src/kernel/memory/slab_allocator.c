@@ -223,8 +223,8 @@ void init_root_slabs(void) {
                 size_t count = 0, capacity = (PAGE_SIZE * PAGES_PER_SLAB - sizeof(struct cache_##SIZE)) / SIZE;        \
                 for (struct cache_entry_##SIZE *e = cache->first_free; e != NULL; e = e->next)                         \
                     count++;                                                                                           \
-                KDBG("slab" #SIZE, "    - Cache at %p has %zd/%zd free entries, %zd in use (%0.2f%%).\n", cache, count,   \
-                     capacity, capacity - count, (float)((free * 1000) / capacity));                                 \
+                KDBG("slab" #SIZE, "    - Cache at %p has %zd/%zd free entries, %zd in use (%0.2f%%).\n", cache,       \
+                     count, capacity, capacity - count, (float)((free * 1000) / capacity));                            \
             }                                                                                                          \
         }                                                                                                              \
         if (slab->first_full == NULL)                                                                                  \

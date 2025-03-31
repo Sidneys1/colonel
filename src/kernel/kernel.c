@@ -313,12 +313,12 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
     slab_test_suite();
 #else
     device_tree_init(fdt);
-    printf("\n\n"
-           "\033[1;93m ______     ______     __         ______     __   __     ______     __       \n"
-           "/\\  ___\\   /\\  __ \\   /\\ \\       /\\  __ \\   /\\ \"-.\\ \\   /\\  ___\\   /\\ \\      \n"
-           "\\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\ \\/\\ \\  \\ \\ \\-.  \\  \\ \\  __\\   \\ \\ \\____ \n"
-           " \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\ \\_\\\\\"\\_\\  \\ \\_____\\  \\ \\_____\\\n"
-           "  \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_/ \\/_/   \\/_____/   \\/_____/\033[0m\n\n");
+    printf("\n\n\033[1;93m"
+           " ____        __                     __ \n"
+           "|    |-----.|  |.-----.-----.-----.|  |\n"
+           "| ---|  _  ||  ||  _  |     |  -__||  |\n"
+           "|____|_____||__||_____|__|__|_____||__|"
+           "\033[0m\n\n");
 
     if (kernel_verbose) {
         inspect_device_tree(fdt);
@@ -420,23 +420,19 @@ void kernel_main(uint32_t hartid, const fdt_header *fdt) {
         (void)slab_free(&root_slab512, data);
         slab_dbg(&root_slab512);
 #endif
-
-        int64_t a = 0, b = 1, c = -1, d = 13;
-        printf("a=%d\nb=%d\nc=%d\nd=%d\n", 1, 2, 3, 4, 5);
-        printf("d=%d\nlld=%lld\nd=%d\n", 1, a, 3, 4);
     }
 
-    // if (kernel_verbose) {
-    slab_dbg(&root_slab4);
-    slab_dbg(&root_slab8);
-    slab_dbg(&root_slab16);
-    slab_dbg(&root_slab32);
-    slab_dbg(&root_slab64);
-    slab_dbg(&root_slab128);
-    slab_dbg(&root_slab256);
-    slab_dbg(&root_slab512);
-    slab_dbg(&root_slab1024);
-    // }
+    if (kernel_verbose) {
+        slab_dbg(&root_slab4);
+        slab_dbg(&root_slab8);
+        slab_dbg(&root_slab16);
+        slab_dbg(&root_slab32);
+        slab_dbg(&root_slab64);
+        slab_dbg(&root_slab128);
+        slab_dbg(&root_slab256);
+        slab_dbg(&root_slab512);
+        slab_dbg(&root_slab1024);
+    }
 
 #endif
 
